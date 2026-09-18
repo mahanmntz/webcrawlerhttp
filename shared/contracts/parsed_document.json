@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ParsedDocument",
+  "description": "Structured document extracted by the Python parser",
+  "type": "object",
+  "required": [
+    "job_id",
+    "url",
+    "title",
+    "meta_description",
+    "extracted_links",
+    "text_sample",
+    "parsed_at"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "title": {
+      "type": "string"
+    },
+    "meta_description": {
+      "type": "string"
+    },
+    "extracted_links": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "text_sample": {
+      "type": "string"
+    },
+    "parsed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

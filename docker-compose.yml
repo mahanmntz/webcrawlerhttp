@@ -1,0 +1,78 @@
+services:
+  redis:
+    image: redis:7.2-alpine
+    container_name: crawler-redis
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./infrastructure/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - crawler-net
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: crawler-api-gateway
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - crawler-net
+
+  crawler-engine:
+    build:
+      context: ./services/crawler-engine
+      dockerfile: Dockerfile
+    container_name: crawler-engine-worker
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=redis:6379
+      - WORKER_COUNT=5
+      - FETCH_TIMEOUT_SEC=10
+      - POLITENESS_DELAY_MS=1000
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - crawler-net
+
+  parser-scraper:
+    build:
+      context: ./services/parser-scraper
+      dockerfile: Dockerfile
+    container_name: crawler-parser-scraper
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - POLL_TIMEOUT_SEC=2
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - crawler-net
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  crawler-net:
+    driver: bridge

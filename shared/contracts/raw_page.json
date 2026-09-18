@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RawPage",
+  "description": "Payload produced by the Go crawler containing the downloaded HTTP response",
+  "type": "object",
+  "required": [
+    "job_id",
+    "url",
+    "status_code",
+    "content_type",
+    "depth",
+    "max_depth",
+    "html",
+    "duration_ms",
+    "fetched_at"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Job identifier associated with this crawl"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Final effective URL after redirects"
+    },
+    "status_code": {
+      "type": "integer",
+      "description": "HTTP response status code (e.g. 200, 404)"
+    },
+    "content_type": {
+      "type": "string",
+      "description": "MIME type header (e.g. text/html; charset=utf-8)"
+    },
+    "depth": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Current depth of this page"
+    },
+    "max_depth": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum allowed depth"
+    },
+    "html": {
+      "type": "string",
+      "description": "Raw HTML response body string"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "description": "Total round-trip time in milliseconds for the HTTP request"
+    },
+    "fetched_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when download completed"
+    }
+  },
+  "additionalProperties": false
+}

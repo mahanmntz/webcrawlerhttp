@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CrawlTarget",
+  "description": "Payload representing a URL enqueued in the URL Frontier for crawling",
+  "type": "object",
+  "required": ["job_id", "url", "depth", "max_depth", "priority", "created_at"],
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the crawling job batch"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "The target HTTP/HTTPS URL to crawl"
+    },
+    "depth": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Current link distance from the seed URL"
+    },
+    "max_depth": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum allowed depth for this crawling tree"
+    },
+    "priority": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "Frontier prioritization (10 = highest, 1 = lowest)"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when this target was enqueued"
+    }
+  },
+  "additionalProperties": false
+}

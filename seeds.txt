@@ -1,0 +1,10 @@
+# ==============================================================================
+# Sample Seed URLs for Distributed Web Crawler
+# Format: One URL per line. Empty lines and lines starting with '#' are ignored.
+# ==============================================================================
+
+https://news.ycombinator.com
+https://en.wikipedia.org/wiki/Web_crawler
+https://go.dev
+https://www.python.org
+https://fastify.dev
