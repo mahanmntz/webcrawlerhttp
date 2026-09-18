@@ -1,20 +1,20 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>مرجع جامع و داشبورد تعاملی کراولر وب توزیع‌شده | Enterprise Web Crawler Monorepo</title>
+  <title>Distributed Web Crawler Lab & Interactive Simulator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg-primary: #070a13;
-      --bg-secondary: #0f172a;
+      --bg-secondary: #0d1322;
       --bg-card: rgba(18, 26, 47, 0.75);
-      --bg-card-hover: rgba(30, 41, 69, 0.85);
+      --bg-card-hover: rgba(28, 39, 68, 0.85);
       --border-color: rgba(99, 102, 241, 0.2);
-      --border-glow: rgba(99, 102, 241, 0.45);
+      --border-glow: rgba(99, 102, 241, 0.4);
       
       --accent-go: #00add8;
       --accent-py: #facc15;
@@ -34,42 +34,40 @@
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: 'Vazirmatn', sans-serif;
+      font-family: 'Inter', sans-serif;
     }
 
     body {
       background-color: var(--bg-primary);
       background-image: 
-        radial-gradient(circle at 10% 10%, rgba(99, 102, 241, 0.12) 0%, transparent 40%),
-        radial-gradient(circle at 90% 90%, rgba(14, 165, 233, 0.1) 0%, transparent 45%),
-        radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.5) 0%, transparent 100%);
+        radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(14, 165, 233, 0.1) 0%, transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.6) 0%, transparent 100%);
       color: var(--text-main);
       min-height: 100vh;
-      padding: 32px 20px;
+      padding: 32px 24px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      line-height: 1.8;
-      text-align: right;
+      line-height: 1.6;
     }
 
-    /* CONTAINER */
     .container {
       width: 100%;
-      max-width: 1200px;
+      max-width: 1240px;
       margin: 0 auto;
     }
 
     /* HEADER */
     header {
       text-align: center;
-      margin-bottom: 36px;
+      margin-bottom: 32px;
       padding-bottom: 24px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       position: relative;
     }
 
-    .badge-top {
+    .badge-pill {
       display: inline-flex;
       align-items: center;
       gap: 8px;
@@ -81,24 +79,27 @@
       font-size: 0.85rem;
       font-weight: 700;
       margin-bottom: 16px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
     }
 
     h1 {
-      font-size: 2.4rem;
-      font-weight: 900;
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 800;
       background: linear-gradient(135deg, #ffffff 30%, #93c5fd 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       letter-spacing: -0.5px;
     }
 
     header p.lead {
       color: var(--text-muted);
-      font-size: 1.1rem;
-      max-width: 850px;
+      font-size: 1.05rem;
+      max-width: 860px;
       margin: 0 auto;
-      line-height: 1.9;
+      line-height: 1.8;
     }
 
     /* NAVIGATION TABS */
@@ -112,21 +113,21 @@
       margin-bottom: 32px;
       flex-wrap: wrap;
       justify-content: center;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     }
 
     .tab-btn {
       background: transparent;
       border: none;
       color: var(--text-muted);
-      padding: 12px 22px;
-      font-size: 0.95rem;
-      font-weight: 700;
+      padding: 12px 20px;
+      font-size: 0.92rem;
+      font-weight: 600;
       border-radius: 12px;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
@@ -141,7 +142,7 @@
       box-shadow: 0 4px 18px rgba(79, 70, 229, 0.45);
     }
 
-    /* PANELS */
+    /* VIEW PANELS */
     .view-panel {
       display: none;
       animation: fadeIn 0.3s ease forwards;
@@ -152,11 +153,11 @@
     }
 
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
+      from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
-    /* CARDS */
+    /* CARDS & CONTAINERS */
     .card {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
@@ -164,13 +165,14 @@
       padding: 28px;
       margin-bottom: 24px;
       backdrop-filter: blur(16px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
     }
 
     .card-title {
-      font-size: 1.4rem;
-      font-weight: 800;
-      margin-bottom: 12px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 10px;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -181,18 +183,18 @@
       color: var(--text-muted);
       font-size: 0.95rem;
       margin-bottom: 20px;
-      line-height: 1.8;
+      line-height: 1.7;
     }
 
-    /* EXPLAINER CALLOUT */
+    /* CALLOUT BOX */
     .callout {
       background: rgba(79, 70, 229, 0.08);
-      border-right: 4px solid #6366f1;
-      padding: 18px 22px;
+      border-left: 4px solid #6366f1;
+      padding: 16px 20px;
       border-radius: 0 14px 14px 0;
       margin: 18px 0;
-      font-size: 0.96rem;
-      line-height: 1.9;
+      font-size: 0.95rem;
+      line-height: 1.75;
       color: #e2e8f0;
     }
 
@@ -200,14 +202,12 @@
       color: #93c5fd;
     }
 
-    /* CODE BOXES */
+    /* CODE & TERMINAL BOXES */
     .code-box {
-      direction: ltr;
-      text-align: left;
       background: #030712;
       border: 1px solid #1e293b;
       border-radius: 12px;
-      padding: 18px 20px;
+      padding: 16px 20px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.88rem;
       color: #38bdf8;
@@ -217,63 +217,12 @@
       line-height: 1.6;
     }
 
-    .code-box code {
-      font-family: inherit;
-    }
-
-    /* COMMAND EXPLORER GRID */
-    .cmd-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .cmd-item {
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px;
-      padding: 20px;
-      cursor: pointer;
-      transition: all 0.25s ease;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .cmd-item:hover {
-      border-color: #6366f1;
-      transform: translateY(-3px);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    }
-
-    .cmd-item.selected {
-      border-color: #38bdf8;
-      background: rgba(14, 165, 233, 0.1);
-      box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
-    }
-
-    .cmd-item-title {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: #facc15;
-      margin-bottom: 8px;
-      direction: ltr;
-      text-align: right;
-    }
-
-    .cmd-item-desc {
-      font-size: 0.88rem;
-      color: var(--text-muted);
-      line-height: 1.7;
-    }
-
     /* BUTTONS */
     .btn {
-      padding: 10px 22px;
-      font-size: 0.92rem;
-      font-weight: 700;
-      border-radius: 12px;
+      padding: 10px 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border-radius: 10px;
       border: none;
       cursor: pointer;
       display: inline-flex;
@@ -286,12 +235,14 @@
     .btn-primary:hover { background: #4338ca; }
     .btn-go { background: var(--accent-go); color: #fff; }
     .btn-go:hover { background: #0284c7; }
-    .btn-py { background: #ca8a04; color: #fff; }
-    .btn-py:hover { background: #a16207; }
+    .btn-py { background: var(--accent-py); color: #0f172a; }
+    .btn-py:hover { background: #eab308; }
     .btn-success { background: var(--accent-success); color: #fff; }
     .btn-success:hover { background: #059669; }
     .btn-danger { background: var(--accent-danger); color: #fff; }
     .btn-danger:hover { background: #dc2626; }
+    .btn-outline { background: transparent; border: 1px solid #334155; color: #cbd5e1; }
+    .btn-outline:hover { background: #1e293b; color: #fff; }
 
     /* METRICS TILES */
     .metrics-row {
@@ -311,22 +262,24 @@
 
     .metric-num {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 2.2rem;
-      font-weight: 900;
+      font-size: 2rem;
+      font-weight: 800;
       color: #38bdf8;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .metric-label {
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       color: var(--text-muted);
       font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     /* WORKER SLOTS */
     .workers-row {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 16px;
       margin: 20px 0;
     }
@@ -352,75 +305,115 @@
       background: rgba(245, 158, 11, 0.08);
     }
 
-    /* PIPELINE STEPS */
-    .steps-list {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
+    /* COMMAND GRID */
+    .cmd-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 14px;
-      margin: 20px 0;
+      margin-bottom: 20px;
     }
 
-    .step-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 16px;
-      background: rgba(15, 23, 42, 0.7);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      padding: 16px 20px;
+    .cmd-card {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 14px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.25s ease;
     }
 
-    .step-idx {
-      background: #4f46e5;
-      color: #ffffff;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 800;
+    .cmd-card:hover {
+      border-color: #6366f1;
+      transform: translateY(-2px);
+    }
+
+    .cmd-card.active {
+      border-color: #38bdf8;
+      background: rgba(14, 165, 233, 0.1);
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+    }
+
+    .cmd-title {
+      font-family: 'JetBrains Mono', monospace;
       font-size: 0.95rem;
-      flex-shrink: 0;
+      font-weight: 700;
+      color: #facc15;
+      margin-bottom: 6px;
     }
 
-    .step-content strong {
-      color: #93c5fd;
-      font-size: 1rem;
-      display: block;
-      margin-bottom: 4px;
-    }
-
-    .step-content p {
+    .cmd-desc {
+      font-size: 0.84rem;
       color: var(--text-muted);
-      font-size: 0.9rem;
-      line-height: 1.7;
-      margin: 0;
+      line-height: 1.5;
     }
 
-    /* TABLE */
-    table.data-table {
+    /* DATA TABLE */
+    table.custom-table {
       width: 100%;
       border-collapse: collapse;
       margin: 16px 0;
-      font-size: 0.92rem;
+      font-size: 0.9rem;
     }
 
-    table.data-table th, table.data-table td {
-      padding: 14px 18px;
-      text-align: right;
+    table.custom-table th, table.custom-table td {
+      padding: 12px 16px;
+      text-align: left;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
 
-    table.data-table th {
+    table.custom-table th {
       background: rgba(15, 23, 42, 0.9);
       color: #93c5fd;
       font-weight: 700;
     }
 
-    table.data-table tr:hover {
-      background: rgba(255, 255, 255, 0.02);
+    /* SEARCH & FILTER BAR */
+    .filter-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 260px;
+      background: #030712;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 10px 16px;
+      color: #f8fafc;
+      font-size: 0.92rem;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+    }
+
+    /* SLIDERS */
+    .slider-group {
+      background: rgba(15, 23, 42, 0.8);
+      padding: 16px 20px;
+      border-radius: 12px;
+      border: 1px solid #1e293b;
+      margin-bottom: 14px;
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+
+    .custom-range {
+      width: 100%;
+      height: 6px;
+      border-radius: 4px;
+      background: #334155;
+      outline: none;
     }
   </style>
 </head>
@@ -428,307 +421,281 @@
 
   <div class="container">
     <header>
-      <div class="badge-top">
-        <span>✔</span> معماری کامل توزیع‌شده با ۴ فاز عملیاتی
+      <div class="badge-pill">
+        <span>⚡</span> Enterprise Distributed Crawler Monorepo
       </div>
-      <h1>مرجع جامع و داشبورد تعاملی کراولر وب سازمانی</h1>
+      <h1>Interactive Crawler Lab & Architecture Playground</h1>
       <p class="lead">
-        آموزش دقیق، راست‌چین و عمیق سیستم کراولر توزیع‌شده مبتنی بر فصل ۹ کتاب Alex Xu؛ تحلیل خط‌به‌خط دستورات، معماری همروندی Go، پارسر BeautifulSoup پایتون، API Gateway تایپ‌اسکریپت و صف‌های اتمیک Redis.
+        A real-time visual companion to Alex Xu's <em>System Design Interview</em> (Chapter 9). Explore URL Frontier queues, worker pool concurrency, per-domain politeness rate-limiting, and BeautifulSoup link discovery.
       </p>
     </header>
 
     <!-- NAVIGATION TABS -->
     <div class="nav-tabs">
-      <button class="tab-btn active" onclick="switchTab('overview')">🌟 ۱. اصلاً داریم چیکار می‌کنیم؟ (معماری کلان)</button>
-      <button class="tab-btn" onclick="switchTab('cmd-deepdive')">🔍 ۲. کالبدشکافی کامل دستورات (Command Dictionary)</button>
-      <button class="tab-btn" onclick="switchTab('cycle')">🔄 ۳. سفر یک لینک در سیستم (چرخه بسته)</button>
-      <button class="tab-btn" onclick="switchTab('api-lab')">🦊 ۴. تست آنلاین API Gateway و متریک‌ها</button>
-      <button class="tab-btn" onclick="switchTab('go-lab')">⚡ ۵. آزمایشگاه همروندی Go (Worker Pool)</button>
-      <button class="tab-btn" onclick="switchTab('py-lab')">🐍 ۶. آزمایشگاه پارسر پایتون (URL Canonicalizer)</button>
+      <button class="tab-btn active" onclick="switchTab('overview')">🏛️ 1. Architecture & Flow</button>
+      <button class="tab-btn" onclick="switchTab('commands')">💻 2. Command Explorer</button>
+      <button class="tab-btn" onclick="switchTab('batch-lab')">📦 3. Batch Ingestion Lab</button>
+      <button class="tab-btn" onclick="switchTab('concurrency-lab')">⚡ 4. Go Worker Pool Lab</button>
+      <button class="tab-btn" onclick="switchTab('canonical-lab')">🐍 5. URL Canonicalizer</button>
+      <button class="tab-btn" onclick="switchTab('doc-viewer')">📄 6. Extracted Docs Viewer</button>
+      <button class="tab-btn" onclick="switchTab('calculator')">🧮 7. Capacity Calculator</button>
     </div>
 
     <!-- TAB 1: ARCHITECTURE OVERVIEW -->
     <div id="tab-overview" class="view-panel active">
       <div class="card">
-        <h2 class="card-title">🌟 هدف کلان سیستم کراولر چیست؟</h2>
+        <h2 class="card-title">🏛️ Distributed System Topology</h2>
         <p class="card-subtitle">
-          هدف ما ساخت سیستمی است که دقیقاً مانند <strong>موتورهای جستجوی عظیم (Google, Bing)</strong> عمل می‌کند: دریافت یک آدرس وب ریشه (Seed URL)، باز کردن و دانلود خودکار آن، کشف تمامی پیوندهای خروجی، و بازگشت پیوندها به صف کراول برای شخم زدن پیوسته تارنماهای وب.
+          How the decoupled services cooperate through Redis message brokers and state queues:
         </p>
 
-        <div class="callout">
-          <strong>🎯 ۳ چالش بنیادین در طراحی کراولر توزیع‌شده (فصل ۹ Alex Xu):</strong><br>
-          ۱. <strong>جلوگیری از حلقه‌های نامحدود و صفحات تکراری (Deduplication):</strong> با دستور اتمیک <code>SADD frontier:seen</code> در Redis، هیچ لینکی دو بار کراول نمی‌شود.<br>
-          ۲. <strong>رعایت ادب و عدم تخریب سرور مقصد (Domain Politeness):</strong> با قفل موقت <code>SET politeness:host:&lt;d&gt; NX PX 1000</code> مانع ارسال سیل ریکوئست‌ها به یک سرور می‌شویم.<br>
-          ۳. <strong>جداسازی کار شبکه از پردازش سنگین (Decoupled Scraping):</strong> عملیات سبک I/O دانلود شبکه در Go، و پردازش سنگین CPU-bound کالبدشکافی DOM در Python اجرا می‌شوند.
+        <div class="code-box">
+  +---------------------------------------------------------------------------------+
+  |                       Client / Ingestion (Makefile / seeds.txt)                 |
+  +---------------------------------------+-----------------------------------------+
+                                          | POST /api/jobs (or /api/jobs/batch)
+                                          v
+  +---------------------------------------------------------------------------------+
+  |                          API Gateway (TypeScript + Fastify)                     |
+  |  - Input validation & Schema checking (TypeBox / Fastify schema)                |
+  |  - SADD frontier:seen -> Deduplication check (returns 409 Conflict if seen)     |
+  +---------------------------------------+-----------------------------------------+
+                                          | LPUSH frontier:queue (CrawlTarget)
+                                          v
+  +---------------------------------------------------------------------------------+
+  |                            Redis 7.2 Broker & State                             |
+  |  - frontier:queue       : Pending crawl tasks                                   |
+  |  - frontier:processing  : In-flight crawl tasks (At-least-once via BRPOPLPUSH)  |
+  |  - frontier:seen        : Set for O(1) URL deduplication                        |
+  |  - politeness:host:&lt;d&gt;  : Per-domain leases with TTL (SET NX PX)                 |
+  |  - queue:raw_pages      : Downloaded HTML bodies                                |
+  |  - queue:parsed_docs    : Clean structured documents                            |
+  +--------------------+---------------------------------------+--------------------+
+                       | BRPOPLPUSH                            ^ LPUSH
+                       v                                       | (Discovered URLs)
+  +---------------------------------------+   +----------------+--------------------+
+  |         Crawler Engine (Go)           |   |       Parser & Scraper (Python)     |
+  |  - Fixed Worker Pool (sync.WaitGroup) |   |  - BeautifulSoup / lxml DOM parsing |
+  |  - Custom http.Transport Keep-Alive   |   |  - URL Canonicalization (urljoin)   |
+  |  - MaxIdleConnsPerHost: 50            |   |  - Script/Image asset filtering     |
+  |  - Domain Politeness coordinator      |   |  - SADD seen check -> Re-enqueue    |
+  +--------------------+------------------+   +-------------------------------------+
+                       | LPUSH queue:raw_pages (RawPage JSON)
+                       +--------------------------------------->
         </div>
 
-        <h3 style="font-size: 1.2rem; color: #38bdf8; margin: 24px 0 12px;">نقش هر فناوری در مونو-ریپو:</h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>فناوری</th>
-              <th>مسیر کد در ریپو</th>
-              <th>وظیفه در سیستم</th>
-              <th>چرا این تکنولوژی انتخاب شد؟</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="color: #f87171; font-weight: 700;">Redis 7.2</td>
-              <td><code>infrastructure/redis/</code></td>
-              <td>ستون فقرات پیام‌ها و فیلتر تکرار</td>
-              <td>عملیات اتمیک بدون قفل دیتابیسی زیر ۱ میلی‌ثانیه؛ لیست‌های مطمئن <code>BRPOPLPUSH</code>.</td>
-            </tr>
-            <tr>
-              <td style="color: #00add8; font-weight: 700;">Go (Golang)</td>
-              <td><code>services/crawler-engine/</code></td>
-              <td>موتور دانلود سریع صفحات</td>
-              <td>مدیریت همروندی با Worker Pool و استفاده مجدد از کانکشن‌های TCP با Connection Pooling.</td>
-            </tr>
-            <tr>
-              <td style="color: #facc15; font-weight: 700;">Python 3.11+</td>
-              <td><code>services/parser-scraper/</code></td>
-              <td>پارسر DOM و کشف پیوندها</td>
-              <td>کتابخانه فوق‌العاده استاندارد BeautifulSoup، نرمال‌سازی پیوندها و اعتبارسنجی با Pydantic.</td>
-            </tr>
-            <tr>
-              <td style="color: #38bdf8; font-weight: 700;">Node.js / TS</td>
-              <td><code>services/api-gateway/</code></td>
-              <td>ارکستراسیون جاب و API Gateway</td>
-              <td>فریم‌ورک فوق‌سریع Fastify، اعتبارسنجی Schema ورودی و پایش زنده متریک‌های کلاستر.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="callout">
+          <strong>Key Architectural Principles (Alex Xu Chapter 9):</strong><br>
+          • <strong>At-Least-Once Delivery:</strong> Tasks are popped using <code>BRPOPLPUSH</code> into a processing queue. If a worker crashes mid-fetch, tasks are never permanently lost.<br>
+          • <strong>Decoupled Scraping:</strong> High-throughput Go network downloads are decoupled from CPU-heavy HTML parsing in Python through Redis buffers.<br>
+          • <strong>Politeness by Design:</strong> Prevents unintentional DoS against target domains by leasing domain tokens via Redis TTLs.
+        </div>
       </div>
     </div>
 
-    <!-- TAB 2: COMMAND DICTIONARY -->
-    <div id="tab-cmd-deepdive" class="view-panel">
+    <!-- TAB 2: COMMAND EXPLORER -->
+    <div id="tab-commands" class="view-panel">
       <div class="card">
-        <h2 class="card-title">🔍 فرهنگ لغت جامع دستورات (Command Dictionary)</h2>
+        <h2 class="card-title">💻 Developer Command Explorer</h2>
         <p class="card-subtitle">
-          تمام دستورات ترمینال از فایل <code>Makefile</code> ریشه پروژه می‌آیند. روی هر کارت کلیک کنید تا دستور خام، محل تعریف و چرایی استفاده از آن را با جزئیات کامل ببینید:
+          Click any command to inspect the exact underlying shell logic, source file location, and production purpose:
         </p>
 
         <div class="cmd-grid">
-          <div class="cmd-item selected" onclick="selectCmd('cluster-up')">
-            <div class="cmd-item-title">make cluster-up</div>
-            <div class="cmd-item-desc">بیلد و اجرای هم‌زمان تمام ۴ کانتینر در داکر کلاستر</div>
+          <div class="cmd-card active" onclick="showCmd('cluster-up')">
+            <div class="cmd-title">make cluster-up</div>
+            <div class="cmd-desc">Build & launch all 4 containers in background</div>
           </div>
-          <div class="cmd-item" onclick="selectCmd('submit-job')">
-            <div class="cmd-item-title">make submit-job</div>
-            <div class="cmd-item-desc">ثبت آدرس اینترنتی جدید برای کراول از طریق API Gateway</div>
+          <div class="cmd-card" onclick="showCmd('crawl-file')">
+            <div class="cmd-title">make crawl-file</div>
+            <div class="cmd-desc">Batch ingest URLs from seeds.txt via Fastify</div>
           </div>
-          <div class="cmd-item" onclick="selectCmd('get-metrics')">
-            <div class="cmd-item-title">make get-metrics</div>
-            <div class="cmd-item-desc">دریافت آمار زنده و طول صف‌های ریدیس از طریق Fastify</div>
+          <div class="cmd-card" onclick="showCmd('submit-job')">
+            <div class="cmd-title">make submit-job</div>
+            <div class="cmd-desc">Submit a single seed URL with deduplication</div>
           </div>
-          <div class="cmd-item" onclick="selectCmd('get-docs')">
-            <div class="cmd-item-title">make get-docs</div>
-            <div class="cmd-item-desc">مشاهده اسناد نهایی تمیز استخراج شده توسط پایتون</div>
+          <div class="cmd-card" onclick="showCmd('get-metrics')">
+            <div class="cmd-title">make get-metrics</div>
+            <div class="cmd-desc">Fetch real-time cluster telemetry & queue lengths</div>
           </div>
-          <div class="cmd-item" onclick="selectCmd('test-all')">
-            <div class="cmd-item-title">make test-all</div>
-            <div class="cmd-item-desc">اجرای هم‌زمان تمام تست‌های واحد Go، پایتون و تایپ‌اسکریپت</div>
+          <div class="cmd-card" onclick="showCmd('export-results')">
+            <div class="cmd-title">make export-results</div>
+            <div class="cmd-desc">Dump all parsed documents to output.json</div>
           </div>
-          <div class="cmd-item" onclick="selectCmd('cluster-down')">
-            <div class="cmd-item-title">make cluster-down</div>
-            <div class="cmd-item-desc">خاموش کردن امن و تمیز کانتینرها بدون از دست رفتن داده‌ها</div>
+          <div class="cmd-card" onclick="showCmd('test-all')">
+            <div class="cmd-title">make test-all</div>
+            <div class="cmd-desc">Run Go, Python, and Vitest test suites concurrently</div>
+          </div>
+          <div class="cmd-card" onclick="showCmd('cluster-down')">
+            <div class="cmd-title">make cluster-down</div>
+            <div class="cmd-desc">Gracefully stop all containers & release resources</div>
           </div>
         </div>
 
-        <div class="callout" id="cmd-detail-desc">
-          <strong>🚀 دستور make cluster-up:</strong><br>
-          فایل <code>docker-compose.yml</code> را می‌خواند؛ کانتینرهای Redis، API Gateway، موتور Go و پارسر Python را بیلد کرده و روی شبکه ایزوله <code>crawler-net</code> در بک‌گراند اجرا می‌کند.
+        <div class="callout" id="cmd-desc-box">
+          <strong>make cluster-up:</strong> Builds Docker images and runs Redis, API Gateway, Go Engine, and Python Scraper on a shared bridge network (<code>crawler-net</code>).
         </div>
 
-        <div class="code-box" id="cmd-detail-raw">
-# دستور اجرا شده در شل:
+        <div class="code-box" id="cmd-code-box">
 docker compose up -d --build
-
-# محل تعریف در ریپو:
-# Makefile: خط ۳۶ (cluster-up)
         </div>
       </div>
     </div>
 
-    <!-- TAB 3: THE CLOSED LOOP -->
-    <div id="tab-cycle" class="view-panel">
+    <!-- TAB 3: BATCH INGESTION LAB -->
+    <div id="tab-batch-lab" class="view-panel">
       <div class="card">
-        <h2 class="card-title">🔄 سفر ۹ مرحله‌ای یک لینک در سیستم (چرخه بسته)</h2>
+        <h2 class="card-title">📦 Batch URL Ingestion & Deduplication Simulator</h2>
         <p class="card-subtitle">
-          ببینید چطور داده‌ها میان Fastify، Redis، موتور Go و پارسر Python دست‌به‌دست می‌شوند:
+          Simulate the behavior of <code>make crawl-file FILE=seeds.txt</code>. Edit the list below and test pipelined Redis deduplication:
         </p>
 
-        <ul class="steps-list">
-          <li class="step-item">
-            <div class="step-idx">۱</div>
-            <div class="step-content">
-              <strong>ورود آدرس به سیستم (Client Request)</strong>
-              <p>کاربر آدرس <code>https://news.ycombinator.com</code> را با متد POST به <code>/api/jobs</code> ارسال می‌کند.</p>
-            </div>
-          </li>
-          <li class="step-item">
-            <div class="step-idx">۲</div>
-            <div class="step-content">
-              <strong>فیلتر تکرار در گیت‌وی (Seen Filter Check)</strong>
-              <p>سرویس Fastify دستور <code>SADD frontier:seen</code> را در Redis اجرا می‌کند. اگر آدرس تکراری باشد بلافاصله ارور ۴۰۹ می‌دهد؛ در غیر این صورت ادامه می‌دهد.</p>
-            </div>
-          </li>
-          <li class="step-item">
-            <div class="step-idx">۳</div>
-            <div class="step-content">
-              <strong>صف‌بندی تسک در ردیس (Enqueue CrawlTarget)</strong>
-              <p>تسک طبق قرارداد <code>crawl_target.json</code> با شناسه UUID بسته‌بندی شده و با <code>LPUSH frontier:queue</code> ذخیره می‌شود.</p>
-            </div>
-          </li>
-          <li class="step-item">
-            <div class="step-idx">۴</div>
-            <div class="step-content">
-              <strong>برداشت مطمئن توسط موتور Go (Reliable Dequeue)</strong>
-              <p>ورکر Go تسک را با <code>BRPOPLPUSH frontier:queue frontier:processing</code> برمی‌دارد تا در صورت کرش، تسک هرگز گم نشود.</p>
-            </div>
-          </li>
-          <li class="step-item">
-            <div class="step-idx">۵</div>
-            <div class="step-content">
-              <strong>بررسی قفل ادب دامنه (Politeness Lease)</strong>
-              <p>موتور Go بررسی می‌کند آیا اخیراً به این دامنه متصل شده است یا خیر (<code>SET NX PX</code>). اگر دامنه خنک بود، دانلود را آغاز می‌کند.</p>
-            </div>
-          </li>
-          <li class="step-item">
-            <div class="step-idx">۶</div>
-            <div class="step-content">
-              <strong>دانلود بهینه و انتقال به صف خام (Fetch & Push RawPage)</strong>
-              <p>صفحه با کلاینت بهینه‌شده Go دانلود شده و پیلود خام HTML به صف <code>queue:raw_pages</code> منتقل می‌شود.</p>
-            </div>
-          </li>
-          <li class="step-item">
-            <div class="step-idx">۷</div>
-            <div class="step-content">
-              <strong>برداشت توسط پارسر پایتون (Python DOM Extraction)</strong>
-              <p>سرویس پایتون صفحه را از صف کشیده و با BeautifulSoup عنوان، توضیحات متا و لینک‌های صفحه را استخراج می‌کند.</p>
-            </div>
-          </li>
-          <li class="step-item">
-            <div class="step-idx">۸</div>
-            <div class="step-content">
-              <strong>استانداردسازی پیوندها (URL Canonicalization)</strong>
-              <p>پایتون لینک‌های نسبی را مطلق می‌کند، فرگمنت‌ها (#) را حذف کرده و پسوندهای عکس یا اسکریپت را فیلتر می‌کند.</p>
-            </div>
-          </li>
-          <li class="step-item">
-            <div class="step-idx">۹</div>
-            <div class="step-content">
-              <strong>بستن چرخه: تزریق لینک‌های جدید به صف اول (Closed Loop Re-enqueue)</strong>
-              <p>پایتون لینک‌های کشف‌شده را دوباره با <code>frontier:seen</code> چک می‌کند و لینک‌های نو را با <code>depth: 1</code> به صف Go برمی‌گرداند!</p>
-            </div>
-          </li>
-        </ul>
-      </div>
-    </div>
-
-    <!-- TAB 4: API GATEWAY LAB -->
-    <div id="tab-api-lab" class="view-panel">
-      <div class="card">
-        <h2 class="card-title">🦊 تست زنده و داشبورد API Gateway (Fastify)</h2>
-        <p class="card-subtitle">
-          مشاهده تله‌متری و تست رفتار اعتبارسنجی جاب‌ها در اندپوینت‌های <code>/api/jobs</code> و <code>/api/metrics</code>:
-        </p>
-
-        <div class="metrics-row">
-          <div class="metric-tile">
-            <div class="metric-num" id="m-pending">۱۴۲۲</div>
-            <div class="metric-label">صف انتظار (frontier:queue)</div>
-          </div>
-          <div class="metric-tile">
-            <div class="metric-num" id="m-flight">۱۰</div>
-            <div class="metric-label">در حال دانلود (processing)</div>
-          </div>
-          <div class="metric-tile">
-            <div class="metric-num" id="m-raw">۰</div>
-            <div class="metric-label">صف صفحات خام برای پایتون</div>
-          </div>
-          <div class="metric-tile">
-            <div class="metric-num" id="m-docs" style="color: #10b981;">۳۱</div>
-            <div class="metric-label">اسناد استخراج شده نهایی</div>
-          </div>
-          <div class="metric-tile">
-            <div class="metric-num" id="m-seen" style="color: #a78bfa;">۱۴۶۴</div>
-            <div class="metric-label">کل آدرس‌های یکتا (Seen)</div>
-          </div>
+        <div style="margin-bottom: 14px;">
+          <textarea id="batch-input" class="search-input" style="width: 100%; height: 120px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" placeholder="Enter one URL per line...">https://news.ycombinator.com
+https://en.wikipedia.org/wiki/Web_crawler
+https://go.dev
+https://news.ycombinator.com
+https://www.python.org
+# This is a comment line
+https://go.dev</textarea>
         </div>
 
-        <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
-          <button class="btn btn-go" onclick="testApi(false)">📥 تست ارسال آدرس جدید (https://go.dev)</button>
-          <button class="btn btn-danger" onclick="testApi(true)">🛑 تست ارسال آدرس تکراری (کد ۴۰۹ Conflict)</button>
-          <button class="btn btn-success" onclick="refreshMetricsSim()">📊 رفرش تله‌متری کلاستر</button>
+        <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+          <button class="btn btn-primary" onclick="simulateBatch()">🚀 Simulate Batch Ingestion (POST /api/jobs/batch)</button>
+          <button class="btn btn-outline" onclick="resetBatchDemo()">🔄 Reset Seen Set</button>
         </div>
 
-        <div class="code-box" id="api-log-box">
-[API Gateway Console]: Click one of the buttons above to test API endpoints!
+        <div class="code-box" id="batch-results-box">
+Click 'Simulate Batch Ingestion' to run the pipeline test...
         </div>
       </div>
     </div>
 
-    <!-- TAB 5: GO CONCURRENCY LAB -->
-    <div id="tab-go-lab" class="view-panel">
+    <!-- TAB 4: GO WORKER POOL LAB -->
+    <div id="tab-concurrency-lab" class="view-panel">
       <div class="card">
-        <h2 class="card-title">⚡ آزمایشگاه همروندی Go: چرایی استفاده از Worker Pool</h2>
+        <h2 class="card-title">⚡ Go Concurrency & Politeness Guard</h2>
         <p class="card-subtitle">
-          تست و مشاهده رفتار ورکرها هنگام مواجهه با دامنه‌های گوناگون در برابر دامنه‌های یکسان:
-        </p>
-
-        <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;">
-          <button class="btn btn-go" onclick="runGoSim(false)">📥 تزریق ۱۰ تسک با دامنه‌های گوناگون</button>
-          <button class="btn btn-py" onclick="runGoSim(true)">🛑 تزریق ۱۰ تسک با دامنه یکسان (تست قفل Politeness)</button>
-          <button class="btn btn-danger" onclick="alert('💥 ارور EMFILE رخ داد: تعداد سوکت‌های باز از سقف مجاز سیستم فراتر رفت!\nبه همین دلیل در پروژه به جای Goroutine نامحدود، از Fixed Worker Pool استفاده کردیم.')">💥 شبیه‌سازی کرش بدون Worker Pool</button>
-        </div>
-
-        <div class="workers-row">
-          <div class="worker-slot" id="w-1">
-            <div style="font-size: 1.8rem; margin-bottom: 4px;">🤖</div>
-            <div style="font-weight: 700;">Worker #01</div>
-            <div class="w-label" style="font-size: 0.8rem; color: #94a3b8;">در انتظار تسک (Idle)</div>
-          </div>
-          <div class="worker-slot" id="w-2">
-            <div style="font-size: 1.8rem; margin-bottom: 4px;">🤖</div>
-            <div style="font-weight: 700;">Worker #02</div>
-            <div class="w-label" style="font-size: 0.8rem; color: #94a3b8;">در انتظار تسک (Idle)</div>
-          </div>
-          <div class="worker-slot" id="w-3">
-            <div style="font-size: 1.8rem; margin-bottom: 4px;">🤖</div>
-            <div style="font-weight: 700;">Worker #03</div>
-            <div class="w-label" style="font-size: 0.8rem; color: #94a3b8;">در انتظار تسک (Idle)</div>
-          </div>
-        </div>
-
-        <div class="code-box" id="go-log-box">
-[Go Engine Console]: Worker pool initialized with 3 workers. Ready for tasks.
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 6: PYTHON LAB -->
-    <div id="tab-py-lab" class="view-panel">
-      <div class="card">
-        <h2 class="card-title">🐍 آزمایشگاه پارسر پایتون: استانداردسازی پیوندها (URL Canonicalizer)</h2>
-        <p class="card-subtitle">
-          تست زنده توابع حل آدرس‌های نسبی، حذف فرگمنت‌ها (#) و فیلتر کردن فایل‌های غیرمتنی:
+          Watch worker goroutines acquire domain leases and prevent DDoS flooding against target hosts:
         </p>
 
         <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
-          <button class="btn btn-py" onclick="testCanon('/docs/getting-started')">لینک نسبی ریشه: /docs</button>
-          <button class="btn btn-py" onclick="testCanon('../api/v1')">مسیر والد: ../api/v1</button>
-          <button class="btn btn-py" onclick="testCanon('/page#heading-3')">حذف فرگمنت: #heading-3</button>
-          <button class="btn btn-danger" onclick="testCanon('/assets/logo.png')">فیلتر پسوند عکس: .png</button>
-          <button class="btn btn-danger" onclick="testCanon('javascript:void(0)')">فیلتر اسکریپت: javascript:</button>
+          <button class="btn btn-go" onclick="simulateWorkers(false)">📥 Enqueue 6 Diverse Domain Tasks</button>
+          <button class="btn btn-py" onclick="simulateWorkers(true)">🛑 Enqueue 6 Wikipedia Tasks (Politeness Test)</button>
+          <button class="btn btn-danger" onclick="alert('EMFILE Crash: Unbounded goroutines exceed OS socket limits (500/500 open files).\nOur Fixed Worker Pool prevents this!')">💥 Simulate Unbounded Goroutine Crash</button>
         </div>
 
-        <div class="code-box" id="py-log-box">
-Base URL: https://example.com/portal/index.html
-Raw Input: (روی یکی از دکمه‌های بالا کلیک کنید)
-Output:    -
+        <div class="workers-row">
+          <div class="worker-slot" id="w-slot-1">
+            <div style="font-size: 2rem; margin-bottom: 4px;">🤖</div>
+            <div style="font-weight: 700;">Worker #01</div>
+            <div class="w-status" style="font-size: 0.82rem; color: #94a3b8;">Idle (Listening)</div>
+          </div>
+          <div class="worker-slot" id="w-slot-2">
+            <div style="font-size: 2rem; margin-bottom: 4px;">🤖</div>
+            <div style="font-weight: 700;">Worker #02</div>
+            <div class="w-status" style="font-size: 0.82rem; color: #94a3b8;">Idle (Listening)</div>
+          </div>
+          <div class="worker-slot" id="w-slot-3">
+            <div style="font-size: 2rem; margin-bottom: 4px;">🤖</div>
+            <div style="font-weight: 700;">Worker #03</div>
+            <div class="w-status" style="font-size: 0.82rem; color: #94a3b8;">Idle (Listening)</div>
+          </div>
+        </div>
+
+        <div class="code-box" id="worker-console">
+[System Ready]: Fixed Worker Pool initialized with 3 concurrent workers.
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: URL CANONICALIZER -->
+    <div id="tab-canonical-lab" class="view-panel">
+      <div class="card">
+        <h2 class="card-title">🐍 Python URL Canonicalization Sandbox</h2>
+        <p class="card-subtitle">
+          See how the BeautifulSoup pipeline normalizes relative paths, strips fragments (#), and drops static binary assets:
+        </p>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px;">
+          <button class="btn btn-outline" onclick="testCanonical('/docs/api/v2')">Relative Root: /docs/api/v2</button>
+          <button class="btn btn-outline" onclick="testCanonical('../team.html')">Parent Directory: ../team.html</button>
+          <button class="btn btn-outline" onclick="testCanonical('/article#comments')">Strip Fragment: /article#comments</button>
+          <button class="btn btn-outline" onclick="testCanonical('/assets/banner.png')">Filter Image: banner.png</button>
+          <button class="btn btn-outline" onclick="testCanonical('mailto:support@site.com')">Filter Scheme: mailto:</button>
+        </div>
+
+        <div class="code-box" id="canonical-output">
+Base URL: https://example.com/blog/intro.html
+Select a test link above to evaluate canonicalization!
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 6: DOCUMENT VIEWER -->
+    <div id="tab-doc-viewer" class="view-panel">
+      <div class="card">
+        <h2 class="card-title">📄 Extracted Documents Explorer</h2>
+        <p class="card-subtitle">
+          Search and inspect normalized document records produced by the Python parser:
+        </p>
+
+        <div class="filter-bar">
+          <input type="text" id="doc-search" class="search-input" placeholder="Search by title, domain, or keyword..." oninput="filterDocuments()">
+          <button class="btn btn-success" onclick="exportSimulated()">💾 Export to output.json</button>
+        </div>
+
+        <div id="docs-container" style="display: flex; flex-direction: column; gap: 14px;">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 7: CAPACITY CALCULATOR -->
+    <div id="tab-calculator" class="view-panel">
+      <div class="card">
+        <h2 class="card-title">🧮 Crawl Cluster Capacity Calculator</h2>
+        <p class="card-subtitle">
+          Estimate cluster throughput, network bandwidth, and memory consumption based on tuning parameters:
+        </p>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Concurrency (Worker Count):</span>
+            <strong id="val-workers" style="color: #38bdf8;">10 workers</strong>
+          </div>
+          <input type="range" class="custom-range" id="range-workers" min="1" max="50" value="10" oninput="calculateCapacity()">
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Average HTTP Latency per Page:</span>
+            <strong id="val-latency" style="color: #facc15;">300 ms</strong>
+          </div>
+          <input type="range" class="custom-range" id="range-latency" min="50" max="1500" step="50" value="300" oninput="calculateCapacity()">
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Politeness Delay per Host:</span>
+            <strong id="val-delay" style="color: #10b981;">1000 ms</strong>
+          </div>
+          <input type="range" class="custom-range" id="range-delay" min="200" max="3000" step="100" value="1000" oninput="calculateCapacity()">
+        </div>
+
+        <div class="metrics-row">
+          <div class="metric-tile">
+            <div class="metric-num" id="calc-rps">33.3</div>
+            <div class="metric-label">Theoretical RPS</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-num" id="calc-daily">2.87M</div>
+            <div class="metric-label">Pages / Day</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-num" id="calc-mem" style="color: #f87171;">48 MB</div>
+            <div class="metric-label">Redis RAM (1M URLs)</div>
+          </div>
         </div>
       </div>
     </div>
@@ -743,181 +710,232 @@ Output:    -
       document.getElementById('tab-' + tabId).classList.add('active');
     }
 
-    /* COMMAND EXPLORER DETAILS */
-    const cmdInfo = {
+    /* COMMAND EXPLORER */
+    const cmdData = {
       'cluster-up': {
-        desc: `<strong>🚀 دستور make cluster-up:</strong><br>
-این دستور فایل <code>docker-compose.yml</code> را می‌خواند؛ هر ۴ سرویس را در قالب کانتینرهای مستقل بیلد کرده و روی شبکه ایزوله <code>crawler-net</code> در پس‌زمینه اجرا می‌کند.`,
-        raw: `# دستور شل پشت صحنه:
-docker compose up -d --build
-
-# کانتینرهای اجرا شده:
-# 1. crawler-redis (پورت 6379)
-# 2. crawler-api-gateway (پورت 3000)
-# 3. crawler-engine-worker (موتور Go)
-# 4. crawler-parser-scraper (پارسر پایتون)`
+        desc: "<strong>make cluster-up:</strong> Reads <code>docker-compose.yml</code>, builds service images, and runs Redis, API Gateway, Go Engine, and Python Parser on the <code>crawler-net</code> bridge.",
+        code: "docker compose up -d --build"
+      },
+      'crawl-file': {
+        desc: "<strong>make crawl-file FILE=seeds.txt:</strong> Reads URLs line-by-line from a text file, packages them into a JSON batch, and sends them via <code>POST /api/jobs/batch</code>.",
+        code: "make crawl-file FILE=seeds.txt"
       },
       'submit-job': {
-        desc: `<strong>📥 دستور make submit-job URL=...:</strong><br>
-یک ریکوئست HTTP POST به اندپوینت <code>/api/jobs</code> ارسال می‌کند. Fastify ابتدا فیلتر تکرار ردیس را بررسی می‌کند؛ اگر جدید باشد آن را در صف <code>frontier:queue</code> قرار می‌دهد.`,
-        raw: `# دستور شل پشت صحنه:
-curl -s -X POST http://localhost:3000/api/jobs \\
-  -H "Content-Type: application/json" \\
-  -d '{"url":"https://news.ycombinator.com","max_depth":2,"priority":5}'`
+        desc: "<strong>make submit-job URL=...:</strong> Sends a single seed URL to Fastify with depth and priority parameters. Returns HTTP 201 or 409 Deduplicated.",
+        code: "curl -s -X POST http://localhost:3000/api/jobs \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"url\":\"https://news.ycombinator.com\",\"max_depth\":2,\"priority\":5}'"
       },
       'get-metrics': {
-        desc: `<strong>📊 دستور make get-metrics:</strong><br>
-تله‌متری لحظه‌ای کلاستر را از ردیس استخراج می‌کند؛ شامل تعداد کارهای در انتظار، کارهای در جریان و تعداد کل اسناد پارس‌شده.`,
-        raw: `# دستور شل پشت صحنه:
-curl -s http://localhost:3000/api/metrics
-
-# خروجی نمونه:
-# {
-#   "pending_queue": 1422,
-#   "in_flight_processing": 10,
-#   "parsed_documents_total": 31,
-#   "unique_urls_seen": 1464
-# }`
+        desc: "<strong>make get-metrics:</strong> Queries cluster telemetry via Fastify: pending queue size, active in-flight requests, and total unique seen URLs.",
+        code: "curl -s http://localhost:3000/api/metrics | jq ."
       },
-      'get-docs': {
-        desc: `<strong>📄 دستور make get-docs:</strong><br>
-اسناد نهایی و تمیز استخراج شده را از صف <code>queue:parsed_docs</code> در ردیس می‌خواند؛ آماده‌ی ارسال به Elasticsearch یا دیتابیس.`,
-        raw: `# دستور شل پشت صحنه:
-curl -s http://localhost:3000/api/documents | jq .`
+      'export-results': {
+        desc: "<strong>make export-results:</strong> Retrieves all parsed documents from Redis <code>queue:parsed_docs</code> and saves them to <code>output.json</code>.",
+        code: "curl -s 'http://localhost:3000/api/documents/export?format=json' > output.json"
       },
       'test-all': {
-        desc: `<strong>🧪 دستور make test-all:</strong><br>
-تست‌های واحد هر ۳ زبان پروژه (Go test + Pytest در پایتون + Vitest در تایپ‌اسکریپت) را هم‌زمان در کمتر از ۱ ثانیه اجرا می‌کند.`,
-        raw: `# دستورات شل پشت صحنه:
-go test -v ./services/crawler-engine/...
-PYTHONPATH=services/parser-scraper pytest -v services/parser-scraper/tests
-npm --prefix services/api-gateway test`
+        desc: "<strong>make test-all:</strong> Executes Go unit tests, Python Pytest extractor tests, and Fastify Vitest suite in under 1 second.",
+        code: "make test-all\n# Runs: go test ./... + pytest tests/ + vitest run"
       },
       'cluster-down': {
-        desc: `<strong>🛑 دستور make cluster-down:</strong><br>
-تمامی کانتینرهای داکر را با سیگنال SIGTERM به آرامی خاموش می‌کند، شبکه را آزاد کرده و منابع رم را بازمی‌گرداند.`,
-        raw: `# دستور شل پشت صحنه:
-docker compose down`
+        desc: "<strong>make cluster-down:</strong> Gracefully shuts down all Docker containers with SIGTERM and cleans up network bindings.",
+        code: "docker compose down"
       }
     };
 
-    function selectCmd(cmdKey) {
-      document.querySelectorAll('.cmd-item').forEach(el => el.classList.remove('selected'));
-      event.currentTarget.classList.add('selected');
-      document.getElementById('cmd-detail-desc').innerHTML = cmdInfo[cmdKey].desc;
-      document.getElementById('cmd-detail-raw').innerText = cmdInfo[cmdKey].raw;
+    function showCmd(cmdKey) {
+      document.querySelectorAll('.cmd-card').forEach(c => c.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      document.getElementById('cmd-desc-box').innerHTML = cmdData[cmdKey].desc;
+      document.getElementById('cmd-code-box').innerText = cmdData[cmdKey].code;
     }
 
-    /* API TESTER SIM */
-    function testApi(isDup) {
-      const box = document.getElementById('api-log-box');
-      if (isDup) {
-        box.innerText = 
-`// HTTP/1.1 409 Conflict
-{
-  "message": "URL has already been submitted or crawled (Deduplicated)",
-  "url": "https://news.ycombinator.com",
-  "status": "deduplicated"
-}`;
-      } else {
-        box.innerText = 
-`// HTTP/1.1 201 Created
-{
-  "job_id": "ef3d43e0-1c3a-42fe-85bf-9f3b3420854f",
-  "url": "https://go.dev",
-  "max_depth": 2,
-  "priority": 8,
-  "status": "enqueued",
-  "message": "Seed URL enqueued successfully into URL Frontier"
-}`;
-        document.getElementById('m-pending').innerText = "۱۴۲۳";
-        document.getElementById('m-seen').innerText = "۱۴۶۵";
-      }
+    /* BATCH INGESTION SIMULATOR */
+    let seenSet = new Set(["https://news.ycombinator.com", "https://go.dev"]);
+
+    function simulateBatch() {
+      const lines = document.getElementById('batch-input').value
+        .split('\n')
+        .map(l => l.trim())
+        .filter(l => l && !l.startsWith('#'));
+
+      const enqueued = [];
+      const deduplicated = [];
+
+      lines.forEach(url => {
+        if (seenSet.has(url)) {
+          deduplicated.push(url);
+        } else {
+          seenSet.add(url);
+          enqueued.push(url);
+        }
+      });
+
+      const response = {
+        total_received: lines.length,
+        enqueued_count: enqueued.length,
+        deduplicated_count: deduplicated.length,
+        enqueued_urls: enqueued,
+        deduplicated_urls: deduplicated,
+        job_ids: enqueued.map(() => 'job-' + Math.random().toString(36).substr(2, 9)),
+        message: `Batch processed: ${enqueued.length} enqueued, ${deduplicated.length} deduplicated`
+      };
+
+      document.getElementById('batch-results-box').innerText = JSON.stringify(response, null, 2);
     }
 
-    function refreshMetricsSim() {
-      document.getElementById('api-log-box').innerText = 
-`// HTTP/1.1 200 OK (GET /api/metrics)
-{
-  "pending_queue": 1422,
-  "in_flight_processing": 10,
-  "raw_pages_for_parser": 0,
-  "parsed_documents_total": 31,
-  "unique_urls_seen": 1464,
-  "timestamp": "${new Date().toISOString()}"
-}`;
+    function resetBatchDemo() {
+      seenSet = new Set();
+      document.getElementById('batch-results-box').innerText = "Seen set cleared! You can run the batch again to see all URLs enqueued.";
     }
 
-    /* GO SIMULATOR */
-    function runGoSim(sameDomain) {
-      const box = document.getElementById('go-log-box');
-      const w1 = document.getElementById('w-1');
-      const w2 = document.getElementById('w-2');
-      const w3 = document.getElementById('w-3');
+    /* GO WORKER SIMULATOR */
+    function simulateWorkers(sameDomain) {
+      const consoleBox = document.getElementById('worker-console');
+      const w1 = document.getElementById('w-slot-1');
+      const w2 = document.getElementById('w-slot-2');
+      const w3 = document.getElementById('w-slot-3');
 
       if (sameDomain) {
-        box.innerText = "[Redis]: Enqueued 10 tasks for 'en.wikipedia.org'. Testing politeness lease...";
+        consoleBox.innerText = "[Redis]: Enqueued 6 targets for 'en.wikipedia.org'. Evaluating politeness leases...";
         w1.className = "worker-slot busy";
-        w1.querySelector('.w-label').innerText = "⚡ در حال دانلود: wikipedia";
-        
+        w1.querySelector('.w-status').innerText = "⚡ Crawling: en.wikipedia.org";
+
         w2.className = "worker-slot polite";
-        w2.querySelector('.w-label').innerText = "🛑 انتظار ادب دامنه (Politeness)";
+        w2.querySelector('.w-status').innerText = "🛑 Politeness Delay (wikipedia.org)";
 
         w3.className = "worker-slot polite";
-        w3.querySelector('.w-label').innerText = "🛑 انتظار ادب دامنه (Politeness)";
+        w3.querySelector('.w-status').innerText = "🛑 Politeness Delay (wikipedia.org)";
 
         setTimeout(() => {
           [w1, w2, w3].forEach(w => {
             w.className = "worker-slot";
-            w.querySelector('.w-label').innerText = "در انتظار تسک (Idle)";
+            w.querySelector('.w-status').innerText = "Idle (Listening)";
           });
-          box.innerText += "\n[Politeness Guard]: Other workers backed off and requeued tasks to protect Wikipedia!";
+          consoleBox.innerText += "\n[Politeness Guard]: Other workers backed off and requeued targets to respect Wikipedia's rate limit!";
         }, 2200);
       } else {
-        box.innerText = "[Redis]: Enqueued 10 diverse tasks. Distributing across worker pool...";
+        consoleBox.innerText = "[Redis]: Enqueued 6 diverse targets. Dispatching across worker pool...";
         [w1, w2, w3].forEach((w, i) => {
           w.className = "worker-slot busy";
-          w.querySelector('.w-label').innerText = `⚡ در حال دانلود (Job #${i+1})`;
+          w.querySelector('.w-status').innerText = `⚡ Crawling (Job #${i + 1})`;
         });
 
         setTimeout(() => {
           [w1, w2, w3].forEach(w => {
             w.className = "worker-slot";
-            w.querySelector('.w-label').innerText = "در انتظار تسک (Idle)";
+            w.querySelector('.w-status').innerText = "Idle (Listening)";
           });
-          box.innerText += "\n[WorkerPool]: All 3 workers completed HTTP downloads and delivered RawPages to queue:raw_pages!";
+          consoleBox.innerText += "\n[WorkerPool]: All 3 workers completed HTTP fetches and delivered RawPages to queue:raw_pages!";
         }, 1800);
       }
     }
 
-    /* CANONICALIZER TEST */
-    function testCanon(raw) {
-      const base = "https://example.com/portal/index.html";
-      let res = "";
-      let status = "✅ استاندارد شد";
+    /* CANONICALIZER */
+    function testCanonical(raw) {
+      const base = "https://example.com/blog/intro.html";
+      let status = "✅ Valid Canonical URL";
+      let result = "";
 
-      if (raw.startsWith("javascript:")) {
-        res = "❌ رد شد: اسکریپت غیرمجاز";
-        status = "رد شده";
-      } else if (raw.endsWith(".png")) {
-        res = "❌ رد شد: پسوند عکس (غیرقابل کراول)";
-        status = "رد شده";
+      if (raw.startsWith("javascript:") || raw.startsWith("mailto:")) {
+        status = "❌ Dropped: Non-HTTP scheme";
+        result = "null";
+      } else if (raw.endsWith(".png") || raw.endsWith(".pdf") || raw.endsWith(".zip")) {
+        status = "❌ Dropped: Static media asset";
+        result = "null";
       } else if (raw.startsWith("/")) {
-        res = "https://example.com" + raw;
+        result = "https://example.com" + raw;
       } else if (raw.startsWith("../")) {
-        res = "https://example.com/" + raw.replace("../", "");
+        result = "https://example.com/" + raw.replace("../", "");
       } else if (raw.includes("#")) {
-        res = "https://example.com/portal/" + raw.split("#")[0] + " (فرگمنت # حذف شد)";
+        result = "https://example.com/blog/" + raw.split("#")[0] + " (fragment stripped)";
       } else {
-        res = "https://example.com/portal/" + raw;
+        result = "https://example.com/blog/" + raw;
       }
 
-      document.getElementById('py-log-box').innerText = 
+      document.getElementById('canonical-output').innerText = 
 `Base URL:   ${base}
-Raw Input:  ${raw}
-Result:     ${res}
-Status:     ${status}`;
+Raw Link:   ${raw}
+Canonical:  ${result}
+Evaluation: ${status}`;
     }
+
+    /* DOCUMENTS VIEWER */
+    const sampleDocs = [
+      {
+        url: "https://news.ycombinator.com",
+        title: "Hacker News",
+        links_count: 30,
+        snippet: "Hacker News new | past | comments | ask | show | jobs | submit. 1. Show HN: High-performance distributed crawler in Go..."
+      },
+      {
+        url: "https://go.dev",
+        title: "The Go Programming Language",
+        links_count: 48,
+        snippet: "Build simple, secure, scalable systems with Go. Supported by Google. Easy to learn and great for cloud services."
+      },
+      {
+        url: "https://en.wikipedia.org/wiki/Web_crawler",
+        title: "Web crawler - Wikipedia",
+        links_count: 142,
+        snippet: "A Web crawler, sometimes called a spider or spiderbot and often shortened to crawler, is an Internet bot that systematically browses the World Wide Web..."
+      },
+      {
+        url: "https://github.com/aws/aws-sdk-go-v2",
+        title: "GitHub - aws/aws-sdk-go-v2: AWS SDK for Go",
+        links_count: 65,
+        snippet: "AWS SDK for the Go programming language. Contribute to aws/aws-sdk-go-v2 development by creating an account on GitHub."
+      }
+    ];
+
+    function renderDocs(docs) {
+      const container = document.getElementById('docs-container');
+      container.innerHTML = docs.map(d => `
+        <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid #1e293b; border-radius: 12px; padding: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <a href="${d.url}" target="_blank" style="color: #38bdf8; font-weight: 700; text-decoration: none; font-size: 1.05rem;">${d.title}</a>
+            <span style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; padding: 2px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 700;">${d.links_count} Outbound Links</span>
+          </div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #64748b; margin-bottom: 8px;">${d.url}</div>
+          <p style="font-size: 0.88rem; color: #94a3b8; line-height: 1.6;">${d.snippet}</p>
+        </div>
+      `).join('');
+    }
+
+    function filterDocuments() {
+      const q = document.getElementById('doc-search').value.toLowerCase();
+      const filtered = sampleDocs.filter(d => 
+        d.title.toLowerCase().includes(q) || 
+        d.url.toLowerCase().includes(q) || 
+        d.snippet.toLowerCase().includes(q)
+      );
+      renderDocs(filtered);
+    }
+
+    function exportSimulated() {
+      alert(`Exporting ${sampleDocs.length} parsed documents to output.json (Equivalent to 'make export-results')!`);
+    }
+
+    /* CAPACITY CALCULATOR */
+    function calculateCapacity() {
+      const workers = parseInt(document.getElementById('range-workers').value, 10);
+      const latency = parseInt(document.getElementById('range-latency').value, 10);
+      const delay = parseInt(document.getElementById('range-delay').value, 10);
+
+      document.getElementById('val-workers').innerText = `${workers} workers`;
+      document.getElementById('val-latency').innerText = `${latency} ms`;
+      document.getElementById('val-delay').innerText = `${delay} ms`;
+
+      const rps = (workers / (latency / 1000)).toFixed(1);
+      const dailyPages = ((rps * 86400) / 1000000).toFixed(2) + 'M';
+      const memEst = Math.round((1000000 * 48) / (1024 * 1024)) + ' MB';
+
+      document.getElementById('calc-rps').innerText = rps;
+      document.getElementById('calc-daily').innerText = dailyPages;
+      document.getElementById('calc-mem').innerText = memEst;
+    }
+
+    // Init
+    renderDocs(sampleDocs);
   </script>
 </body>
 </html>
