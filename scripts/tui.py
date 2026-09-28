@@ -20,6 +20,7 @@ from datetime import datetime
 from collections import deque
 
 import redis
+from rich import box
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
@@ -355,7 +356,7 @@ class Supervisor:
             f"[bold white]\\[E][/bold white] Export JSON  │  "
             f"[bold white]\\[Q][/bold white] Quit Cleanly"
         )
-        layout["footer"].update(Panel(footer_text, border_style="dim", box=None))
+        layout["footer"].update(Panel(footer_text, border_style="dim", box=box.ROUNDED))
 
         return layout
 
