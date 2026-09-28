@@ -79,15 +79,19 @@ class Supervisor:
             self.log("ERROR", f"Flush error: {e}")
 
     def enqueue_url(self, url: str):
+        import urllib.request
+        import urllib.error
+
+        payload = json.dumps({
+            "url": url,
+            "max_depth": self.max_depth,
+            "priority": 5,
+            "stay_in_domain": self.stay_in_domain,
+            "force": True
+        }).encode('utf-8')
+
         for attempt in range(12):
             try:
-                import urllib.request
-                payload = json.dumps({
-                    "url": url,
-                    "max_depth": self.max_depth,
-                    "priority": 5,
-                    "stay_in_domain": self.stay_in_domain
-                }).encode('utf-8')
                 req = urllib.request.Request(
                     f"{GATEWAY_URL}/api/jobs",
                     data=payload,
@@ -98,12 +102,26 @@ class Supervisor:
                         self.status_msg = f"🚀 Enqueued to Go Frontier: {url}"
                         self.log("GATEWAY", f"Target URL enqueued successfully: {url}")
                         return
-            except Exception as e:
+            except urllib.error.HTTPError as e:
+                if e.code == 409:
+                    self.status_msg = f"♻️ URL already seen in Redis (Bloom). Press [F] to flush & recrawl."
+                    self.log("GATEWAY", f"Seed already in Redis: {url}")
+                    return
+                elif e.code == 400:
+                    self.status_msg = f"❌ Invalid URL: {url}"
+                    self.log("ERROR", f"Invalid URL: {url}")
+                    return
                 time.sleep(0.75)
+            except Exception:
+                time.sleep(0.75)
+
         self.status_msg = f"⚠️ Could not reach Gateway to enqueue: {url}"
         self.log("WARN", f"Failed to enqueue {url} after 12 retries")
 
     def enqueue_file(self, file_path: str):
+        import urllib.request
+        import urllib.error
+
         full_path = os.path.abspath(file_path)
         if not os.path.exists(full_path):
             self.status_msg = f"❌ File not found: {file_path}"
@@ -112,15 +130,16 @@ class Supervisor:
             with open(full_path, "r", encoding="utf-8") as f:
                 urls = [line.strip() for line in f if line.strip() and not line.startswith("#")]
             
+            payload = json.dumps({
+                "urls": urls,
+                "max_depth": self.max_depth,
+                "priority": 5,
+                "stay_in_domain": self.stay_in_domain,
+                "force": True
+            }).encode('utf-8')
+
             for attempt in range(12):
                 try:
-                    import urllib.request
-                    payload = json.dumps({
-                        "urls": urls,
-                        "max_depth": self.max_depth,
-                        "priority": 5,
-                        "stay_in_domain": self.stay_in_domain
-                    }).encode('utf-8')
                     req = urllib.request.Request(
                         f"{GATEWAY_URL}/api/jobs/batch",
                         data=payload,
@@ -131,6 +150,11 @@ class Supervisor:
                         self.status_msg = f"📁 Batch enqueued {res.get('enqueued_count', 0)} URLs ({res.get('deduplicated_count', 0)} deduplicated)"
                         self.log("GATEWAY", self.status_msg)
                         return
+                except urllib.error.HTTPError as e:
+                    if e.code == 400:
+                        self.status_msg = f"❌ Bad batch payload: {e}"
+                        return
+                    time.sleep(0.75)
                 except Exception:
                     time.sleep(0.75)
             self.status_msg = f"⚠️ Could not reach Gateway for batch file"

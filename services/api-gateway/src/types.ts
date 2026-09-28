@@ -28,6 +28,7 @@ export interface CreateJobRequestBody {
   max_depth?: number;
   priority?: number;
   stay_in_domain?: boolean;
+  force?: boolean;
 }
 
 export interface CreateBatchJobRequestBody {
@@ -35,6 +36,7 @@ export interface CreateBatchJobRequestBody {
   max_depth?: number;
   priority?: number;
   stay_in_domain?: boolean;
+  force?: boolean;
 }
 
 export interface BatchJobResponse {

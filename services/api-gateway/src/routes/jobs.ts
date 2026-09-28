@@ -23,7 +23,7 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { url, max_depth = 2, priority = 5, stay_in_domain = true } = request.body;
+      const { url, max_depth = 2, priority = 5, stay_in_domain = true, force = false } = request.body;
 
       try {
         const parsed = new URL(url);
@@ -34,13 +34,15 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ error: 'Invalid URL format' });
       }
 
-      const isNew = await isNewUrl(url);
-      if (!isNew) {
-        return reply.status(409).send({
-          message: 'URL has already been submitted or crawled (Deduplicated)',
-          url,
-          status: 'deduplicated',
-        });
+      if (!force) {
+        const isNew = await isNewUrl(url);
+        if (!isNew) {
+          return reply.status(409).send({
+            message: 'URL has already been submitted or crawled (Deduplicated)',
+            url,
+            status: 'deduplicated',
+          });
+        }
       }
 
       const jobId = uuidv4();
@@ -99,7 +101,7 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { urls, max_depth = 2, priority = 5, stay_in_domain = true } = request.body;
+      const { urls, max_depth = 2, priority = 5, stay_in_domain = true, force = false } = request.body;
 
       // Filter and validate URLs
       const validUrls: string[] = [];
@@ -129,10 +131,12 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
 
       for (const url of validUrls) {
         try {
-          const isNew = await isNewUrl(url);
-          if (!isNew) {
-            deduplicatedUrls.push(url);
-            continue;
+          if (!force) {
+            const isNew = await isNewUrl(url);
+            if (!isNew) {
+              deduplicatedUrls.push(url);
+              continue;
+            }
           }
 
           const jobId = uuidv4();
