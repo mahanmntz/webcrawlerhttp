@@ -1,4 +1,4 @@
-.PHONY: help test-all test-go test-python test-gateway run-crawler run-parser run-gateway cluster-up cluster-down cluster-logs submit-job crawl-file get-metrics get-docs export-results seed-test seed-wikipedia check-redis read-raw-pages read-parsed-docs open-lab
+.PHONY: help test-all test-go test-python test-gateway run-crawler run-parser run-gateway cluster-up cluster-down cluster-logs submit-job crawl-file get-metrics get-docs export-results seed-test seed-wikipedia check-redis read-raw-pages read-parsed-docs open-lab get-bloom get-content get-robots
 
 help:
 	@echo "Distributed Web Crawler & Scraper Monorepo"
@@ -78,6 +78,15 @@ crawl-file:
 
 get-metrics:
 	@curl -s http://localhost:3000/api/metrics | jq . || curl -s http://localhost:3000/api/metrics
+
+get-bloom:
+	@docker exec crawler-redis redis-cli BF.INFO frontier:bloom:url
+
+get-content:
+	@docker exec crawler-redis redis-cli SCARD content:seen
+
+get-robots:
+	@docker exec crawler-redis redis-cli GET robots:example.com || echo "robots cache empty"
 
 get-docs:
 	@curl -s http://localhost:3000/api/documents | jq . || curl -s http://localhost:3000/api/documents

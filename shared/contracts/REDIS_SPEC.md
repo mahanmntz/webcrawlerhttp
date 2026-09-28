@@ -15,16 +15,27 @@ This specification documents the Redis data structures used by `api-gateway`, `c
   - Acknowledge Completion: `LREM frontier:processing 1 <CrawlTarget_JSON>`
 
 ## 2. Seen Filter (URL Deduplication)
-- **Key**: `frontier:seen`
-- **Data Type**: `Set`
-- **Purpose**: Fast $O(1)$ lookup to guarantee a URL is never crawled or enqueued more than once.
+- **Key**: `frontier:bloom:url`
+- **Data Type**: RedisBloom `BF` filter
+- **Purpose**: Approximate membership testing for high-volume frontier deduplication with compact memory use.
 - **Operations**:
-  - `SADD frontier:seen <canonical_url>`
+  - `BF.ADD frontier:bloom:url <canonical_url>`
+  - `BF.INFO frontier:bloom:url`
   - **Return Value**:
-    - `1`: URL is brand new. Safe to enqueue into `frontier:queue`.
-    - `0`: URL has already been processed or is currently in flight. Skip!
+    - `1`: URL is new to the Bloom filter.
+    - `0`: URL likely already exists; treat as deduplicated.
 
-## 3. Politeness & Rate-Limiting Leases
+- **Compatibility Key**: `frontier:seen`
+  - **Data Type**: `Set`
+  - **Purpose**: Exact fallback / legacy set when RedisBloom is unavailable.
+
+## 3. robots.txt Cache
+- **Key Pattern**: `robots:<host>`
+- **Data Type**: `String` (JSON payload)
+- **TTL**: `86400` seconds (24h)
+- **Purpose**: Cache robots policy per host to avoid repeated fetches and respect crawl boundaries.
+
+## 4. Politeness & Rate-Limiting Leases
 - **Key Pattern**: `politeness:host:<domain>` (e.g. `politeness:host:en.wikipedia.org`)
 - **Data Type**: `String` with TTL
 - **Purpose**: Prevent DDoS and respect host crawling bandwidth.
@@ -33,7 +44,7 @@ This specification documents the Redis data structures used by `api-gateway`, `c
   - If returned `OK`, the worker has permission to request the domain.
   - If returned `nil`, the domain is currently cooling down. Worker must back off or process a different domain.
 
-## 4. Raw Page Queue (Decoupled Scraping)
+## 5. Raw Page Queue (Decoupled Scraping)
 - **Key**: `queue:raw_pages`
 - **Data Type**: `List`
 - **Producer**: `crawler-engine` (Go)
@@ -42,7 +53,14 @@ This specification documents the Redis data structures used by `api-gateway`, `c
   - Enqueue: `LPUSH queue:raw_pages <RawPage_JSON>`
   - Dequeue: `BRPOP queue:raw_pages 2` (blocking pop)
 
-## 5. Parsed Documents Output
+## 6. Content Fingerprint Set
+- **Key**: `content:seen`
+- **Data Type**: `Set`
+- **Purpose**: Prevent duplicate page bodies under different URLs from being re-indexed.
+- **Operations**:
+  - `SADD content:seen <64-bit-body-fingerprint>`
+
+## 7. Parsed Documents Output
 - **Key**: `queue:parsed_docs`
 - **Data Type**: `List`
 - **Producer**: `parser-scraper` (Python)

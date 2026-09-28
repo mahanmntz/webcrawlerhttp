@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { redis } from '../redis.js';
 import { config } from '../config.js';
+import { isNewUrl } from '../seen.js';
 import { CrawlTarget, CreateJobRequestBody, CreateBatchJobRequestBody, BatchJobResponse } from '../types.js';
 
 export const jobRoutes: FastifyPluginAsync = async (fastify) => {
@@ -33,8 +34,8 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ error: 'Invalid URL format' });
       }
 
-      const isNew = await redis.sadd(config.setSeenUrls, url);
-      if (isNew === 0) {
+      const isNew = await isNewUrl(url);
+      if (!isNew) {
         return reply.status(409).send({
           message: 'URL has already been submitted or crawled (Deduplicated)',
           url,
@@ -118,13 +119,6 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ error: 'No valid HTTP/HTTPS URLs provided in the batch' });
       }
 
-      // 1. Pipeline deduplication check using Redis SADD
-      const checkPipeline = redis.pipeline();
-      for (const url of validUrls) {
-        checkPipeline.sadd(config.setSeenUrls, url);
-      }
-      const checkResults = await checkPipeline.exec();
-
       const enqueuedUrls: string[] = [];
       const deduplicatedUrls: string[] = [];
       const jobIds: string[] = [];
@@ -132,40 +126,42 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
 
       const now = new Date().toISOString();
 
-      if (checkResults) {
-        checkResults.forEach(([err, result], idx) => {
-          const url = validUrls[idx];
-          if (!err && result === 1) {
-            // New unique URL! Package as CrawlTarget
-            const jobId = uuidv4();
-            const target: CrawlTarget = {
-              job_id: jobId,
-              url,
-              depth: 0,
-              max_depth,
-              priority,
-              created_at: now,
-            };
-
-            enqueuePipeline.lpush(config.queueFrontier, JSON.stringify(target));
-            enqueuePipeline.hset(`job:${jobId}`, {
-              job_id: jobId,
-              url,
-              max_depth,
-              priority,
-              status: 'enqueued',
-              created_at: now,
-            });
-
-            enqueuedUrls.push(url);
-            jobIds.push(jobId);
-          } else {
+      for (const url of validUrls) {
+        try {
+          const isNew = await isNewUrl(url);
+          if (!isNew) {
             deduplicatedUrls.push(url);
+            continue;
           }
-        });
+
+          const jobId = uuidv4();
+          const target: CrawlTarget = {
+            job_id: jobId,
+            url,
+            depth: 0,
+            max_depth,
+            priority,
+            created_at: now,
+          };
+
+          enqueuePipeline.lpush(config.queueFrontier, JSON.stringify(target));
+          enqueuePipeline.hset(`job:${jobId}`, {
+            job_id: jobId,
+            url,
+            max_depth,
+            priority,
+            status: 'enqueued',
+            created_at: now,
+          });
+
+          enqueuedUrls.push(url);
+          jobIds.push(jobId);
+        } catch (err) {
+          console.error(`[jobs.batch] Failed to process URL ${url}:`, err);
+          deduplicatedUrls.push(url);
+        }
       }
 
-      // Execute atomic enqueue for all valid new targets
       if (enqueuedUrls.length > 0) {
         await enqueuePipeline.exec();
       }

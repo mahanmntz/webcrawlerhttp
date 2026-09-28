@@ -22,3 +22,6 @@ output.json
 # Environment
 .env
 .env.local
+
+# Playground 
+playground/

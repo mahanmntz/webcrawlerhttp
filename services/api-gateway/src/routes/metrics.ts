@@ -3,6 +3,39 @@ import { redis } from '../redis.js';
 import { config } from '../config.js';
 import { ClusterMetrics, ParsedDocument } from '../types.js';
 
+function parseBloomInfo(value: unknown): number {
+  if (!value) return 0;
+
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length - 1; i += 2) {
+      const key = String(value[i]).toLowerCase();
+      const next = value[i + 1];
+      if (key.includes('items') || key.includes('number')) {
+        const numeric = Number(next ?? 0);
+        if (!Number.isNaN(numeric)) {
+          return numeric;
+        }
+      }
+    }
+    return 0;
+  }
+
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>);
+    for (const [key, item] of entries) {
+      const lowered = key.toLowerCase();
+      if (lowered.includes('items') || lowered.includes('number')) {
+        const numeric = Number(item ?? 0);
+        if (!Number.isNaN(numeric)) {
+          return numeric;
+        }
+      }
+    }
+  }
+
+  return Number(value) || 0;
+}
+
 export const metricsRoutes: FastifyPluginAsync = async (fastify) => {
   // Real-time distributed cluster telemetry
   fastify.get('/api/metrics', async (request, reply) => {
@@ -11,7 +44,16 @@ export const metricsRoutes: FastifyPluginAsync = async (fastify) => {
     pipeline.llen(config.queueProcessing);
     pipeline.llen(config.queueRawPages);
     pipeline.llen(config.queueParsedDocs);
-    pipeline.scard(config.setSeenUrls);
+
+    let uniqueUrlsSeen = 0;
+
+    try {
+      const bloomInfo = await redis.call('BF.INFO', config.bloomUrlSeen);
+      uniqueUrlsSeen = parseBloomInfo(bloomInfo);
+    } catch (err) {
+      const fallback = await redis.scard(config.setSeenUrls);
+      uniqueUrlsSeen = Number(fallback || 0);
+    }
 
     const results = await pipeline.exec();
     if (!results) {
@@ -23,7 +65,7 @@ export const metricsRoutes: FastifyPluginAsync = async (fastify) => {
       in_flight_processing: Number(results[1][1] || 0),
       raw_pages_for_parser: Number(results[2][1] || 0),
       parsed_documents_total: Number(results[3][1] || 0),
-      unique_urls_seen: Number(results[4][1] || 0),
+      unique_urls_seen: uniqueUrlsSeen,
       timestamp: new Date().toISOString(),
     };
 

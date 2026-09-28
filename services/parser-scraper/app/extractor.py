@@ -1,3 +1,4 @@
+import hashlib
 import re
 from typing import List, Tuple
 from urllib.parse import urljoin, urlparse, urldefrag
@@ -9,6 +10,28 @@ IGNORED_EXTENSIONS = {
     ".mp3", ".mp4", ".avi", ".mov", ".wav",
     ".css", ".js", ".json", ".xml", ".ico", ".woff", ".woff2"
 }
+
+
+def extract_clean_body_text(html: str) -> str:
+    """
+    Remove boilerplate HTML and normalize the visible body text into a comparable format.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    for element in soup(["script", "style", "noscript", "svg", "header", "footer", "nav", "aside"]):
+        element.decompose()
+
+    text = soup.get_text(" ", strip=True)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip().lower()
+
+
+def body_fingerprint(text: str) -> int:
+    """
+    Compute a 64-bit integer fingerprint from the normalized HTML body text.
+    """
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], byteorder="big", signed=False)
 
 def canonicalize_url(base_url: str, raw_href: str) -> str | None:
     """
