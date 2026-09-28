@@ -134,4 +134,15 @@ describe('API Gateway Server Tests', () => {
     expect(Array.isArray(body.documents)).toBe(true);
     expect(typeof body.total_count).toBe('number');
   });
+
+  it('GET / serves the Web UI dashboard', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/html');
+    expect(response.payload).toContain('SpiderRAG');
+  });
 });

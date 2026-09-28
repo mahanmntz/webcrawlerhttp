@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpiderRAG | Distributed Web-to-Markdown Crawler & Scraper</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #080b11;
+      --bg-surface: #0f1522;
+      --bg-card: rgba(18, 25, 38, 0.7);
+      --bg-card-hover: rgba(26, 36, 54, 0.85);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(56, 189, 248, 0.3);
+      --accent-cyan: #38bdf8;
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      line-height: 1.5;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 85% 25%, rgba(139, 92, 246, 0.08) 0%, transparent 45%),
+        radial-gradient(circle at 50% 80%, rgba(16, 185, 129, 0.06) 0%, transparent 50%);
+      background-attachment: fixed;
+    }
+
+    /* Top Navigation */
+    header {
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgba(8, 11, 17, 0.8);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #0ea5e9, #8b5cf6);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.35);
+    }
+
+    .brand-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(90deg, #f8fafc, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-tag {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 9999px;
+      background: rgba(56, 189, 248, 0.12);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .cluster-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.04);
+      padding: 0.4rem 0.85rem;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-emerald);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-emerald);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.7; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.7; }
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-family: var(--font-sans);
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: white;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #0369a1, #1d4ed8);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+      border-color: var(--border-subtle);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Main Container */
+    main {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 1.25rem;
+      transition: all 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .metric-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-glow);
+      background: var(--bg-card-hover);
+    }
+
+    .metric-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .metric-title {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric-icon {
+      font-size: 1.1rem;
+      opacity: 0.85;
+    }
+
+    .metric-value {
+      font-size: 1.85rem;
+      font-weight: 800;
+      color: var(--text-main);
+      letter-spacing: -0.03em;
+    }
+
+    .metric-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-top: 0.35rem;
+    }
+
+    .savings-badge {
+      display: inline-block;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    /* Content Area */
+    .dashboard-split {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 1024px) {
+      .dashboard-split {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Panel Card */
+    .panel {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .panel-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .panel-description {
+      font-size: 0.825rem;
+      color: var(--text-muted);
+    }
+
+    /* Form Inputs */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .form-label {
+      font-size: 0.825rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .form-input {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+    }
+
+    .preset-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+    }
+
+    .chip {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 0.25rem 0.6rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .chip:hover {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-cyan);
+      border-color: rgba(56, 189, 248, 0.3);
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .toggle-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .toggle-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .toggle-desc {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+
+    /* Switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.1);
+      transition: .3s;
+      border-radius: 24px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--accent-cyan);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    /* Document List & Inspector */
+    .docs-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .doc-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      max-height: 520px;
+      overflow-y: auto;
+      padding-right: 0.5rem;
+    }
+
+    .doc-list::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .doc-list::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+
+    .doc-card {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 1rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .doc-card:hover {
+      border-color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.05);
+      transform: translateX(3px);
+    }
+
+    .doc-card.selected {
+      border-color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.08);
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.15);
+    }
+
+    .doc-card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .doc-card-url {
+      font-family: var(--font-mono);
+      font-size: 0.775rem;
+      color: var(--accent-cyan);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .doc-card-meta {
+      display: flex;
+      gap: 0.75rem;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-top: 0.25rem;
+    }
+
+    /* Markdown Preview Modal / Panel */
+    .preview-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(10px);
+      z-index: 100;
+      padding: 2rem;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .preview-modal.active {
+      display: flex;
+    }
+
+    .modal-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 900px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      overflow: hidden;
+    }
+
+    .modal-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .modal-body {
+      padding: 1.5rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .markdown-box {
+      background: #06090e;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 1.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #e2e8f0;
+      line-height: 1.6;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      border-radius: 10px;
+      padding: 0.85rem 1.25rem;
+      font-size: 0.875rem;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 200;
+    }
+
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .empty-state {
+      padding: 3rem 1rem;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🕷️</div>
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span class="brand-title">SpiderRAG Engine</span>
+          <span class="brand-tag">Distributed AI Scraper</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div class="cluster-status">
+        <div class="pulse-dot"></div>
+        <span>Cluster: <strong style="color: var(--accent-emerald);">ONLINE</strong></span>
+      </div>
+      <button class="btn btn-secondary" onclick="exportDocuments()">
+        📥 Export Dataset (JSON)
+      </button>
+      <button class="btn btn-primary" onclick="fetchMetrics()">
+        🔄 Refresh
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main>
+    <!-- Live Telemetry Grid -->
+    <section class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">Frontier Queue</span>
+          <span class="metric-icon">⏳</span>
+        </div>
+        <div class="metric-value" id="val-frontier">0</div>
+        <div class="metric-subtitle">Pending crawl targets</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">In-Flight Workers</span>
+          <span class="metric-icon">⚡</span>
+        </div>
+        <div class="metric-value" id="val-inflight" style="color: var(--accent-cyan);">0</div>
+        <div class="metric-subtitle">Go fetchers active</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">Unique URLs Filtered</span>
+          <span class="metric-icon">🛡️</span>
+        </div>
+        <div class="metric-value" id="val-seen">0</div>
+        <div class="metric-subtitle">Bloom filter deduplicated</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">Parsed Documents</span>
+          <span class="metric-icon">📄</span>
+        </div>
+        <div class="metric-value" id="val-parsed" style="color: var(--accent-emerald);">0</div>
+        <div class="metric-subtitle">Clean docs extracted</div>
+      </div>
+
+      <div class="metric-card" style="border-color: rgba(16, 185, 129, 0.35);">
+        <div class="metric-header">
+          <span class="metric-title">LLM Token Savings</span>
+          <span class="metric-icon">📉</span>
+        </div>
+        <div class="metric-value" id="val-savings" style="color: var(--accent-emerald);">0%</div>
+        <div class="metric-subtitle">
+          <span class="savings-badge">RAG Optimized</span>
+        </div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">Extracted Tokens</span>
+          <span class="metric-icon">🧠</span>
+        </div>
+        <div class="metric-value" id="val-tokens" style="color: var(--accent-purple);">0</div>
+        <div class="metric-subtitle">Est. LLM context tokens</div>
+      </div>
+    </section>
+
+    <!-- Interactive Workspace -->
+    <div class="dashboard-split">
+      <!-- Crawl Job Dispatcher -->
+      <div class="panel">
+        <div>
+          <h2 class="panel-title">🚀 Dispatch Crawl Mission</h2>
+          <p class="panel-description">Enqueue seed URLs into the distributed Go frontier with domain safety guards.</p>
+        </div>
+
+        <form id="crawl-form" onsubmit="handleCrawlSubmit(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="form-group">
+            <label class="form-label">Seed URL</label>
+            <input type="url" id="input-url" class="form-input" placeholder="https://example.com/docs" required>
+            
+            <div class="preset-chips">
+              <span class="chip" onclick="setPreset('https://fastify.dev')">Fastify Docs</span>
+              <span class="chip" onclick="setPreset('https://news.ycombinator.com')">Hacker News</span>
+              <span class="chip" onclick="setPreset('https://www.python.org')">Python Org</span>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label class="form-label">Max Depth</label>
+              <input type="number" id="input-depth" class="form-input" value="2" min="0" max="5">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Priority (1-10)</label>
+              <input type="number" id="input-priority" class="form-input" value="5" min="1" max="10">
+            </div>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <span class="toggle-title">Domain Boundary Guard</span>
+              <span class="toggle-desc">Constrain discovery strictly to base host</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-domain" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <button type="submit" id="btn-submit" class="btn btn-primary" style="padding: 0.8rem; font-size: 0.95rem;">
+            ⚡ Start Extraction Mission
+          </button>
+        </form>
+      </div>
+
+      <!-- Live Extracted Documents Explorer -->
+      <div class="panel">
+        <div class="docs-header">
+          <div>
+            <h2 class="panel-title">📚 Clean Markdown Stream</h2>
+            <p class="panel-description">Click any document to inspect RAG-ready markdown and token analytics.</p>
+          </div>
+          <span id="doc-counter" class="savings-badge">0 documents</span>
+        </div>
+
+        <div id="doc-list" class="doc-list">
+          <div class="empty-state">
+            No scraped documents yet. Submit a URL mission above to watch live documents stream in!
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Document Inspector Modal -->
+  <div id="preview-modal" class="preview-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <h3 id="modal-title" style="font-size: 1.1rem; font-weight: 700;">Document Markdown</h3>
+          <p id="modal-url" style="font-size: 0.8rem; color: var(--accent-cyan); font-family: var(--font-mono);"></p>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-primary" onclick="copyMarkdown()">📋 Copy Markdown</button>
+          <button class="btn btn-secondary" onclick="closeModal()">✕ Close</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+          <span id="modal-tokens" class="savings-badge">Tokens: ~0</span>
+          <span id="modal-savings" class="savings-badge" style="background: rgba(56, 189, 248, 0.15); color: var(--accent-cyan); border-color: rgba(56, 189, 248, 0.3);">Token Savings: -0%</span>
+        </div>
+        <pre id="modal-content" class="markdown-box"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Element -->
+  <div id="toast">🔔 Message</div>
+
+  <script>
+    let activeDocs = [];
+    let selectedDoc = null;
+
+    function showToast(msg, isSuccess = true) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.style.borderColor = isSuccess ? 'var(--accent-emerald)' : 'var(--accent-rose)';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3500);
+    }
+
+    function setPreset(url) {
+      document.getElementById('input-url').value = url;
+    }
+
+    async function fetchMetrics() {
+      try {
+        const res = await fetch('/api/metrics');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        document.getElementById('val-frontier').textContent = data.pending_queue || 0;
+        document.getElementById('val-inflight').textContent = data.in_flight_processing || 0;
+        document.getElementById('val-seen').textContent = data.unique_urls_seen || 0;
+        document.getElementById('val-parsed').textContent = data.parsed_documents_total || 0;
+        document.getElementById('val-savings').textContent = `-${data.token_savings_pct || 0}%`;
+        document.getElementById('val-tokens').textContent = (data.total_markdown_tokens_est || 0).toLocaleString();
+      } catch (err) {
+        console.error('Failed to fetch metrics:', err);
+      }
+    }
+
+    async function fetchDocuments() {
+      try {
+        const res = await fetch('/api/documents?limit=30');
+        if (!res.ok) return;
+        const data = await res.json();
+        activeDocs = data.documents || [];
+
+        const list = document.getElementById('doc-list');
+        const counter = document.getElementById('doc-counter');
+        counter.textContent = `${activeDocs.length} documents`;
+
+        if (activeDocs.length === 0) {
+          list.innerHTML = `<div class="empty-state">No scraped documents yet. Submit a URL mission above to watch live documents stream in!</div>`;
+          return;
+        }
+
+        list.innerHTML = activeDocs.map((doc, idx) => `
+          <div class="doc-card" onclick="openInspector(${idx})">
+            <div class="doc-card-title">
+              <span>${escapeHtml(doc.title || 'Untitled Document')}</span>
+              <span class="savings-badge">-${doc.token_savings_pct || 0}%</span>
+            </div>
+            <div class="doc-card-url">${escapeHtml(doc.url)}</div>
+            <div class="doc-card-meta">
+              <span>🧠 ~${doc.estimated_tokens || 0} tokens</span>
+              <span>🔗 ${doc.links ? doc.links.length : 0} links found</span>
+              <span>🕒 ${new Date(doc.scraped_at).toLocaleTimeString()}</span>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to fetch documents:', err);
+      }
+    }
+
+    async function handleCrawlSubmit(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit');
+      btn.disabled = true;
+      btn.textContent = 'Enqueuing...';
+
+      const payload = {
+        url: document.getElementById('input-url').value.trim(),
+        max_depth: parseInt(document.getElementById('input-depth').value, 10),
+        priority: parseInt(document.getElementById('input-priority').value, 10),
+        stay_in_domain: document.getElementById('toggle-domain').checked
+      };
+
+      try {
+        const res = await fetch('/api/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (res.status === 201) {
+          showToast(`🚀 Crawl target enqueued: ${payload.url}`);
+          fetchMetrics();
+          fetchDocuments();
+        } else if (res.status === 409) {
+          showToast(`⚠️ URL already crawled or seen (Bloom deduplicated)`, false);
+        } else {
+          showToast(`❌ Error: ${data.error || 'Failed to submit job'}`, false);
+        }
+      } catch (err) {
+        showToast('❌ Network error submitting job', false);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '⚡ Start Extraction Mission';
+      }
+    }
+
+    function openInspector(idx) {
+      selectedDoc = activeDocs[idx];
+      if (!selectedDoc) return;
+
+      document.getElementById('modal-title').textContent = selectedDoc.title || 'Scraped Document';
+      document.getElementById('modal-url').textContent = selectedDoc.url;
+      document.getElementById('modal-tokens').textContent = `Tokens: ~${selectedDoc.estimated_tokens || 0}`;
+      document.getElementById('modal-savings').textContent = `Token Savings: -${selectedDoc.token_savings_pct || 0}%`;
+      document.getElementById('modal-content').textContent = selectedDoc.markdown || selectedDoc.content_text || 'No text extracted';
+
+      document.getElementById('preview-modal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('preview-modal').classList.remove('active');
+    }
+
+    function copyMarkdown() {
+      if (!selectedDoc || !selectedDoc.markdown) return;
+      navigator.clipboard.writeText(selectedDoc.markdown);
+      showToast('📋 Markdown copied to clipboard!');
+    }
+
+    function exportDocuments() {
+      window.location.href = '/api/documents/export';
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Polling heartbeat every 2.5s
+    fetchMetrics();
+    fetchDocuments();
+    setInterval(() => {
+      fetchMetrics();
+      fetchDocuments();
+    }, 2500);
+  </script>
+</body>
+</html>

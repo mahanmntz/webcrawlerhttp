@@ -1,17 +1,35 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
 import Fastify from 'fastify';
+import fastifyCors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import { config } from './config.js';
 import { redis } from './redis.js';
 import { jobRoutes } from './routes/jobs.js';
 import { metricsRoutes } from './routes/metrics.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export function buildServer() {
   const app = Fastify({
     logger: false,
   });
 
+  // Enable CORS
+  app.register(fastifyCors, {
+    origin: true,
+  });
+
+  // Serve modern Web UI Dashboard
+  app.register(fastifyStatic, {
+    root: path.join(__dirname, '../public'),
+    prefix: '/',
+  });
+
   // Clean structured request logger
   app.addHook('onResponse', (request, reply, done) => {
-    if (request.url !== '/healthz') {
+    if (request.url !== '/healthz' && !request.url.startsWith('/public') && !request.url.includes('.')) {
       const icon = reply.statusCode < 400 ? '✅' : '⚠️';
       console.log(`[GATEWAY] ${icon} ${request.method} ${request.url} -> HTTP ${reply.statusCode} (${Math.round(reply.elapsedTime)}ms)`);
     }
