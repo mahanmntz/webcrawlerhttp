@@ -12,6 +12,7 @@ import (
 	"crawler-engine/internal/fetcher"
 	"crawler-engine/internal/frontier"
 	"crawler-engine/internal/politeness"
+	"crawler-engine/internal/robots"
 	"crawler-engine/internal/worker"
 
 	"github.com/redis/go-redis/v9"
@@ -45,10 +46,25 @@ func main() {
 	log.Println("[Init] Successfully connected to Redis broker.")
 
 	// Construct Components
-	frontierClient := frontier.New(rdb)
+	frontierClient := frontier.New(rdb, cfg.VisibilityTimeout, cfg.MaxRedeliveries)
 	fetcherClient := fetcher.New(cfg)
 	politenessLimiter := politeness.New(rdb, cfg.PolitenessDelayMs)
-	workerPool := worker.New(cfg.WorkerCount, frontierClient, fetcherClient, politenessLimiter)
+
+	var robotsChecker *robots.Checker
+	if cfg.RespectRobots {
+		robotsChecker = robots.New(rdb, fetcherClient.Client(), fetcherClient.UserAgent(), cfg.RobotsUserAgent)
+	} else {
+		log.Println("[Config] ⚠️  RESPECT_ROBOTS=false: robots.txt is NOT being enforced")
+	}
+	if cfg.AllowPrivateNetworks {
+		log.Println("[Config] ⚠️  ALLOW_PRIVATE_NETWORKS=true: SSRF guard is disabled")
+	}
+
+	workerPool := worker.New(worker.Options{
+		WorkerCount:   cfg.WorkerCount,
+		MaxAttempts:   cfg.MaxAttempts,
+		MaxCrawlDelay: cfg.MaxCrawlDelay,
+	}, frontierClient, fetcherClient, politenessLimiter, robotsChecker)
 
 	// Setup Graceful Shutdown via OS Signals
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
