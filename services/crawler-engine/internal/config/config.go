@@ -20,9 +20,9 @@ func Load() *Config {
 	return &Config{
 		RedisAddr:         getEnv("REDIS_ADDR", "localhost:6379"),
 		WorkerCount:       getEnvAsInt("WORKER_COUNT", 5),
-		FetchTimeout:      getEnvAsDuration("FETCH_TIMEOUT_SEC", 10*time.Second),
+		FetchTimeout:      getEnvAsDuration("FETCH_TIMEOUT_SEC", 15*time.Second),
 		PolitenessDelayMs: getEnvAsInt("POLITENESS_DELAY_MS", 1000),
-		UserAgent:         getEnv("USER_AGENT", "DistributedEnterpriseCrawler/1.0 (+https://example.com/bot)"),
+		UserAgent:         getEnv("USER_AGENT", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 SpiderRAG/1.0"),
 	}
 }
 

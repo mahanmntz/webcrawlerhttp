@@ -162,6 +162,7 @@ class Supervisor:
         p_gateway = subprocess.Popen(
             ["npm", "--prefix", "services/api-gateway", "run", "dev"],
             cwd=ROOT_DIR,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -176,6 +177,7 @@ class Supervisor:
             [VENV_PYTHON, "services/parser-scraper/parser_worker.py"],
             cwd=ROOT_DIR,
             env=dict(os.environ, PYTHONPATH="services/parser-scraper"),
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -190,6 +192,7 @@ class Supervisor:
             ["go", "run", "./services/crawler-engine"],
             cwd=ROOT_DIR,
             env=dict(os.environ, REDIS_ADDR=f"{REDIS_HOST}:{REDIS_PORT}", WORKER_COUNT="3"),
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
