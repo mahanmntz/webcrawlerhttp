@@ -13,6 +13,15 @@ class ParserPipeline:
     def __init__(self, rdb: redis.Redis):
         self.rdb = rdb
 
+    def _is_new_url(self, url: str) -> bool:
+        """
+        Check if URL is new using RedisBloom filter with graceful fallback to standard Set.
+        """
+        try:
+            return bool(self.rdb.execute_command("BF.ADD", Config.BLOOM_URL_SEEN, url) == 1)
+        except Exception:
+            return bool(self.rdb.sadd(Config.SET_SEEN_URLS, url) == 1)
+
     def process_raw_page(self, raw_page: RawPage) -> ParsedDocument | None:
         """
         Executes the full parsing, link discovery, content deduplication, and re-enqueueing cycle.
@@ -25,7 +34,7 @@ class ParserPipeline:
         # 2. Skip duplicate content to suppress mirror pages under different URLs
         is_new_content = self.rdb.sadd(Config.SET_CONTENT_SEEN, str(fingerprint))
         if is_new_content == 0:
-            logger.info(f"Skipping duplicate content for '{raw_page.url}' (fingerprint={fingerprint})")
+            logger.info(f"♻️  [DEDUP]  Skipping duplicate content for '{raw_page.url}' (FP: {fingerprint})")
             return None
 
         # 3. Construct ParsedDocument
@@ -48,9 +57,8 @@ class ParserPipeline:
 
         if next_depth <= raw_page.max_depth:
             for link in links:
-                # O(1) Atomic Deduplication Check in Redis
-                is_new = self.rdb.sadd(Config.SET_SEEN_URLS, link)
-                if is_new == 1:
+                # Bloom Filter / Fallback Set Deduplication Check
+                if self._is_new_url(link):
                     # Brand new link discovered! Package as CrawlTarget contract
                     target = CrawlTarget(
                         job_id=raw_page.job_id,
@@ -65,10 +73,9 @@ class ParserPipeline:
                 else:
                     logger.debug(f"Link deduplicated (already seen): {link}")
 
+        title_display = title.strip()[:40] if title else "(No Title)"
         logger.info(
-            f"Parsed '{raw_page.url}' | Title: '{title[:40]}' | "
-            f"Links Found: {len(links)} | New Targets Enqueued: {new_enqueued_count} (Depth {next_depth}/{raw_page.max_depth}) | "
-            f"Content FP: {fingerprint}"
+            f"📄 [PARSED] '{raw_page.url}' | Title: '{title_display}' | 🔗 Links: {len(links)} | 📥 Enqueued: {new_enqueued_count} (Depth {next_depth}/{raw_page.max_depth}) | ⚡ FP: {fingerprint}"
         )
 
         return parsed_doc

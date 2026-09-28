@@ -8,89 +8,160 @@
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-An enterprise-grade, high-throughput distributed web crawler and scraper monorepo inspired by **Chapter 9 of Alex Xu's *"System Design Interview"*** (URL Frontier, URL Seen Deduplication, Politeness/Rate-Limiting, Decoupled Scraping).
+An enterprise-grade, high-throughput distributed web crawler and scraper monorepo inspired by **Chapter 9 of Alex Xu's *"System Design Interview"***. Built with a polyglot architecture separating high-concurrency network I/O (Go) from CPU-intensive DOM parsing (Python) and strict API orchestration (TypeScript/Fastify), backed by Redis.
 
 ---
 
 ## 🏛️ System Architecture
 
-```text
-                           +----------------------------+
-                           |  Client / Ingestion Script |
-                           +--------------+-------------+
-                                          |
-                POST /api/jobs            |  POST /api/jobs/batch (seeds.txt)
-                                          v
-                           +----------------------------+
-                           |   API Gateway (Fastify)    |
-                           |  - TypeScript / Node.js    |
-                           |  - Strict Schema Validation|
-                           |  - Deduplication Check     |
-                           +--------------+-------------+
-                                          |
-                                          v  LPUSH (CrawlTarget JSON)
-  +-----------------------------------------------------------------------------------+
-  |                             Distributed State (Redis 7.2)                         |
-  |  - `frontier:queue`       : List of pending CrawlTargets                          |
-  |  - `frontier:processing`  : In-flight targets (At-least-once reliable queue)      |
-  |  - `frontier:seen`        : Set for O(1) URL deduplication                        |
-  |  - `politeness:host:<d>`  : Per-domain temporary leases with TTL for rate limits  |
-  |  - `queue:raw_pages`      : Downloaded raw HTML payloads                          |
-  |  - `queue:parsed_docs`    : Normalized structured documents                       |
-  +-----------------------+-----------------------------------+-----------------------+
-                          |                                   ^
-                          v  BRPOPLPUSH                       | LPUSH (Discovered URLs)
-  +---------------------------------------+                   |
-  |      Crawler Engine (Go)              |                   |
-  |  - Fixed Goroutine Worker Pool        |                   |
-  |  - Connection Pooling & Keep-Alive    |                   |
-  |  - Host Politeness Limiter (SET NX PX)|                   |
-  |  - Graceful Shutdown (SIGINT/SIGTERM) |                   |
-  +-----------------------+---------------+                   |
-                          |                                   |
-                          v  LPUSH (RawPage JSON)             |
-  +---------------------------------------+                   |
-  |      Parser & Scraper (Python)        |                   |
-  |  - BeautifulSoup / lxml DOM Parsing   |                   |
-  |  - URL Canonicalization & Fragment Del+-------------------+
-  |  - Media/Script Asset Filtering       |
-  |  - Pushes structured doc to output    |
-  +---------------------------------------+
+### Component Topology
+```mermaid
+flowchart TD
+    subgraph Ingestion ["1. URL Ingestion Layer"]
+        Client["Client / CLI<br/>(make crawl-file seeds.txt)"]
+        Gateway["API Gateway<br/>(TypeScript / Fastify :3000)"]
+    end
+
+    subgraph RedisBroker ["2. Distributed Broker & State (Redis 7.2)"]
+        Bloom["frontier:bloom:url<br/>(Bloom Filter / Set Deduplication)"]
+        FrontierQueue["frontier:queue<br/>(Pending CrawlTargets)"]
+        ProcessingQueue["frontier:processing<br/>(At-Least-Once Leases)"]
+        PolitenessKeys["politeness:host:domain<br/>(Distributed Rate Limits)"]
+        RawPagesQueue["queue:raw_pages<br/>(Raw HTML Payloads)"]
+        ContentSeen["content:seen<br/>(64-bit Body Fingerprints)"]
+        ParsedDocsQueue["queue:parsed_docs<br/>(Structured Output)"]
+    end
+
+    subgraph Crawler ["3. Downloader Engine (Go)"]
+        WorkerPool["Goroutine Worker Pool<br/>(Concurrent HTTP Fetching)"]
+        PolitenessLimiter["Politeness Limiter<br/>(SET NX PX Leases)"]
+        Transport["Optimized HTTP Transport<br/>(Keep-Alive, 5MB Max Body)"]
+    end
+
+    subgraph Web ["4. World Wide Web"]
+        WebServers["Target Web Servers<br/>(news.ycombinator.com, etc.)"]
+    end
+
+    subgraph Scraper ["5. Parser & Scraper (Python)"]
+        ParserWorker["Parser Worker<br/>(BeautifulSoup / lxml)"]
+        Canonicalizer["URL Canonicalizer & Asset Filter"]
+        Fingerprinter["64-bit SHA-256 Fingerprinter"]
+    end
+
+    Client -->|POST /api/jobs/batch| Gateway
+    Gateway -->|1. Check URL Seen| Bloom
+    Gateway -->|2. Push New Seeds| FrontierQueue
+
+    FrontierQueue -->|BRPOPLPUSH| ProcessingQueue
+    ProcessingQueue --> WorkerPool
+
+    WorkerPool -->|Acquire Host Lease| PolitenessKeys
+    WorkerPool -->|Execute Request| Transport
+    Transport -->|HTTP GET| WebServers
+    WebServers -->|HTML Response| Transport
+
+    WorkerPool -->|LPUSH RawPage| RawPagesQueue
+    WorkerPool -->|LREM Acknowledge| ProcessingQueue
+
+    RawPagesQueue -->|BRPOP| ParserWorker
+    ParserWorker -->|Clean Body & Hash| Fingerprinter
+    Fingerprinter -->|Check Duplicate Body| ContentSeen
+
+    ParserWorker -->|Extract & Canonicalize| Canonicalizer
+    Canonicalizer -->|Deduplicate & Re-enqueue| Bloom
+    Canonicalizer -->|New Child Links| FrontierQueue
+
+    ParserWorker -->|Store Structured Document| ParsedDocsQueue
+    ParsedDocsQueue -->|GET /api/documents/export| Client
+```
+
+---
+
+### Distributed Crawl Lifecycle
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User / make crawl-file
+    participant Gateway as API Gateway (TS)
+    participant Redis as Redis Broker
+    participant Go as Crawler Engine (Go)
+    participant Web as Target Server
+    participant Py as Parser / Scraper (Python)
+
+    User->>Gateway: POST /api/jobs/batch (seeds.txt)
+    Gateway->>Redis: BF.ADD / SADD frontier:bloom:url
+    alt URL is Duplicate
+        Gateway-->>User: 409 Deduplicated / Batch stats
+    else URL is Brand New
+        Gateway->>Redis: LPUSH frontier:queue
+        Gateway-->>User: 201 Enqueued
+    end
+
+    Go->>Redis: BRPOPLPUSH frontier:queue -> frontier:processing
+    Go->>Redis: SET politeness:host:<domain> NX PX 1000ms
+    alt Host Cooling Down
+        Go->>Redis: LPUSH frontier:queue (Requeue) & sleep briefly
+    else Lease Acquired
+        Go->>Web: HTTP GET (Timeout 10s, Keep-Alive, 5MB limit)
+        Web-->>Go: 200 OK HTML
+        Go->>Redis: LPUSH queue:raw_pages
+        Go->>Redis: LREM frontier:processing (Acknowledge)
+    end
+
+    Py->>Redis: BRPOP queue:raw_pages
+    Py->>Py: Normalize text & 64-bit SHA-256 Fingerprint
+    Py->>Redis: SADD content:seen <FP>
+    alt Duplicate Body (Mirror Page)
+        Py->>Py: Skip re-indexing duplicate content
+    else Unique Content
+        Py->>Redis: LPUSH queue:parsed_docs
+        Py->>Py: Extract <a> links & canonicalize
+        Py->>Redis: BF.ADD / SADD frontier:bloom:url & LPUSH frontier:queue (Depth+1)
+    end
 ```
 
 ---
 
 ## ✨ Core Engineering Features
 
-1. **Distributed URL Frontier**:
-   - Reliable queue semantics via `BRPOPLPUSH` into `frontier:processing` to guarantee **at-least-once delivery** even if a worker crashes mid-crawl.
-2. **Atomic URL Deduplication**:
-   - Fast $O(1)$ duplicate filtering via Redis Sets (`SADD frontier:seen`). Duplicate submissions return immediate HTTP `409 Conflict`.
+1. **Dual-Layer Deduplication (URL & Content)**:
+   - **URL Layer**: Uses **RedisBloom (`BF.ADD`)** on `frontier:bloom:url` for memory-efficient membership testing across millions of URLs, with seamless fallback to Redis Sets (`frontier:seen`).
+   - **Content Layer**: Normalizes DOM bodies (stripping boilerplate scripts, headers, footers) and computes a **64-bit SHA-256 fingerprint** stored in `content:seen` to eliminate duplicate or mirror pages under different URLs.
+2. **Reliable URL Frontier**:
+   - Atomic job transition via `BRPOPLPUSH` between `frontier:queue` and `frontier:processing` to guarantee **at-least-once delivery** if a crawler worker crashes mid-download.
 3. **Per-Host Politeness & Rate-Limiting**:
-   - Enforces a delay per domain using distributed Redis leases (`SET politeness:host:<domain> <worker_id> NX PX 1000`) to prevent overwhelming target servers.
-4. **Decoupled Architecture (I/O vs CPU)**:
-   - Separates network I/O-bound HTML downloading (Go) from CPU-bound DOM parsing and text extraction (Python) using asynchronous Redis queues.
-5. **Production HTTP Client Tuning**:
-   - Custom Go `http.Transport` with Keep-Alive, TCP connection reuse (`MaxIdleConnsPerHost: 50`), socket timeouts, and a 5MB payload limit to prevent memory exhaustion bombs.
-6. **URL Canonicalization Engine**:
-   - Resolves relative paths (`/about` $\to$ absolute), strips URL fragments (`#top`), and filters out media/script extensions (`.png`, `.pdf`, `.zip`, `.js`).
+   - Prevents target server overload by enforcing atomic distributed leases (`SET politeness:host:<domain> <worker_id> NX PX <delay_ms>`). Rate-limited targets are safely requeued.
+4. **Decoupled Polyglot Architecture**:
+   - **Network I/O**: Go engine handles high-concurrency HTTP downloading with persistent connection pools (`MaxIdleConnsPerHost: 50`) and response size caps.
+   - **CPU-bound Scraping**: Python service parses DOM trees, cleans boilerplate, and extracts metadata in an isolated process.
+   - **API Gateway**: Fastify (TypeScript) performs schema validation, batch ingestion pipelining, and exposes real-time telemetry.
+5. **Living Contract Verification**:
+   - Strongly typed JSON Schemas in `shared/contracts/` strictly mapped to Go structs, Python Pydantic models, and TypeScript interfaces.
 
 ---
 
-## ⚡ Quickstart in 60 Seconds
+## ⚡ Quickstart
 
-### Prerequisites
-- [Docker](https://www.docker.com/) & Docker Compose
-- (Optional for local development) [Go 1.22+](https://go.dev/), [Node.js 20+](https://nodejs.org/), [Python 3.11+](https://www.python.org/)
+### 🚀 One-Command Launch (Native / Fast)
+Start all services (Redis check, Fastify Gateway, Go Crawler, Python Parser) with a single command:
+```bash
+make start
+```
+*(Press `Ctrl+C` at any time to cleanly stop all services together).*
 
-### 1. Launch the Cluster
-Build and start all 4 containers (Redis, API Gateway, Go Engine, Python Parser) in the background:
+---
+
+### 🐳 Alternative: Full Docker Compose Launch
 ```bash
 make cluster-up
 ```
 
-### 2. Batch Ingest Seed URLs
-Feed URLs from the sample `seeds.txt` file into the distributed pipeline:
+---
+
+## 🎯 How to Run a Crawl Test
+
+### 1. Ingest Seed URLs
+Feed URLs from `seeds.txt` directly into the distributed pipeline:
 ```bash
 make crawl-file FILE=seeds.txt
 ```
@@ -99,36 +170,32 @@ make crawl-file FILE=seeds.txt
 make submit-job URL=https://news.ycombinator.com
 ```
 
-### 3. Monitor Real-Time Cluster Metrics
-Query queue lengths, active workers, and throughput:
+### 2. Inspect Real-Time Telemetry
+Query queue depths, active in-flight crawls, and Bloom filter stats:
 ```bash
 make get-metrics
 ```
 *Example response:*
 ```json
 {
-  "pending_queue": 1422,
-  "in_flight_processing": 10,
+  "pending_queue": 1365,
+  "in_flight_processing": 13,
   "raw_pages_for_parser": 0,
-  "parsed_documents_total": 31,
-  "unique_urls_seen": 1464,
-  "timestamp": "2026-09-18T03:18:01.116Z"
+  "parsed_documents_total": 83,
+  "unique_urls_seen": 1475,
+  "timestamp": "2026-09-28T23:02:05.055Z"
 }
 ```
 
-### 4. Export Extracted Data to File
-Download all parsed structured documents into `output.json`:
+### 3. Export Extracted Documents
+Download all parsed documents into `output.json`:
 ```bash
 make export-results
 ```
 
-### 5. Follow Live Cluster Logs
+### 4. Stop All Services
 ```bash
-make cluster-logs
-```
-
-### 6. Stop the Cluster
-```bash
+# If running via Docker Compose:
 make cluster-down
 ```
 
@@ -136,44 +203,62 @@ make cluster-down
 
 ## 📡 REST API Reference
 
-The API Gateway runs on port `3000` (`http://localhost:3000`).
+The API Gateway runs at `http://localhost:3000`.
 
-| Method | Endpoint | Description | Request Body / Query | Success Response |
+| Method | Endpoint | Description | Payload / Query | Response |
 | :--- | :--- | :--- | :--- | :--- |
-| `POST` | `/api/jobs` | Submit a single seed URL | `{"url": "https://go.dev", "max_depth": 2}` | `201 Created` or `409 Deduplicated` |
+| `POST` | `/api/jobs` | Submit a single seed URL | `{"url": "https://go.dev", "max_depth": 2}` | `201 Created` or `409 Conflict` |
 | `POST` | `/api/jobs/batch` | Batch ingest array of URLs | `{"urls": ["https://site1.com", "https://site2.com"]}` | `201 Created` with batch stats |
-| `GET` | `/api/jobs/:id` | Fetch metadata of a crawl job | Path parameter `id` (UUID) | `200 OK` with job details |
-| `GET` | `/api/metrics` | Real-time cluster telemetry | None | `200 OK` (queue lengths & seen count) |
+| `GET` | `/api/jobs/:id` | Fetch job status metadata | Path parameter `id` (UUID) | `200 OK` with job details |
+| `GET` | `/api/metrics` | Real-time cluster telemetry | None | `200 OK` (queues & Bloom count) |
 | `GET` | `/api/documents` | Retrieve latest parsed documents | `?limit=20` (max 50) | `200 OK` with documents array |
-| `GET` | `/api/documents/export` | Export all documents to file | `?format=json` | `200 OK` (attachment `output.json`) |
-| `GET` | `/healthz` | Cluster liveness probe | None | `200 OK` `{"status": "healthy"}` |
+| `GET` | `/api/documents/export` | Export all documents to JSON file | None | `200 OK` (`crawled_documents.json`) |
+| `GET` | `/healthz` | Cluster health probe | None | `200 OK` `{"status": "healthy"}` |
+
+---
+
+## 🛠️ Developer Make Targets
+
+| Target | Description |
+| :--- | :--- |
+| `make start` | 🚀 **One-Command Launch**: Starts Redis check, Gateway, Crawler, and Parser concurrently |
+| `make cluster-up` | Build and start all 4 services via Docker Compose |
+| `make cluster-down` | Stop and remove cluster containers cleanly |
+| `make crawl-file FILE=seeds.txt` | Ingest batch URLs from file |
+| `make submit-job URL=...` | Submit a single seed URL |
+| `make get-metrics` | Fetch real-time cluster metrics |
+| `make get-docs` | Fetch recent extracted documents |
+| `make export-results` | Export all documents to `output.json` |
+| `make test-all` | Run test suites across Go, Python, and TypeScript |
+| `make test-go` | Run Go unit tests |
+| `make test-python` | Run Python pytest suite |
+| `make test-gateway` | Run Fastify Vitest suite |
 
 ---
 
 ## 🧪 Testing Matrix
 
-Run the automated test suites across all 3 programming languages in under 1 second:
+All test suites run deterministically in isolated environments without external service dependencies:
 ```bash
 make test-all
 ```
 
-To run individual language suites:
-```bash
-make test-go        # Go unit tests (httptest & connection pool)
-make test-python    # Python Pytest (extractor & canonicalizer)
-make test-gateway   # Vitest (Fastify route validation & schemas)
-```
+- **Go**: Validates HTTP transport timeout handling and keep-alive connection pooling.
+- **Python**: Validates URL canonicalization, fragment removal, asset filtering, and duplicate content detection.
+- **TypeScript**: Validates Fastify request schemas, batch ingestion pipelining, and error handling.
 
 ---
 
-## 📂 Repository Structure
+## 📂 Repository Layout
 
 ```text
 .
-├── Makefile                     # Root developer orchestration commands
-├── docker-compose.yml           # Multi-container orchestration (Redis, Go, Py, TS)
+├── Makefile                     # Developer workflow and orchestration targets
+├── scripts/
+│   └── start.sh                 # One-command concurrent runner with unified shutdown
+├── docker-compose.yml           # Multi-service composition (Redis, Go, Py, TS)
 ├── seeds.txt                    # Sample seed URL ingestion file
-├── OVERVIEW.md                  # Comprehensive architectural deep-dive (Persian)
+├── OVERVIEW.md                  # Comprehensive architectural deep-dive
 ├── shared/
 │   └── contracts/               # Shared JSON Schema data contracts
 │       ├── crawl_target.json    # Target URL contract (Go input)
@@ -181,33 +266,20 @@ make test-gateway   # Vitest (Fastify route validation & schemas)
 │       ├── parsed_document.json # Structured document contract (Python output)
 │       └── REDIS_SPEC.md        # Redis key topology specification
 ├── services/
-│   ├── api-gateway/             # Node.js + TypeScript + Fastify
-│   │   ├── src/                 # Fastify server, routes, and Redis client
+│   ├── api-gateway/             # Node.js / TypeScript / Fastify API service
+│   │   ├── src/                 # Fastify server, routes, and Bloom filter check
 │   │   ├── Dockerfile
 │   │   └── package.json
-│   ├── crawler-engine/          # Go high-performance downloader
+│   ├── crawler-engine/          # Go high-throughput HTTP downloader
 │   │   ├── internal/            # Worker pool, Fetcher, Politeness limiter
 │   │   ├── main.go
 │   │   ├── Dockerfile
 │   │   └── go.mod
 │   └── parser-scraper/          # Python DOM extraction & link discovery
-│       ├── app/                 # BeautifulSoup extractor & pipeline
+│       ├── app/                 # BeautifulSoup extractor, fingerprinting, pipeline
 │       ├── parser_worker.py
 │       ├── Dockerfile
 │       └── requirements.txt
-└── playground/
-    └── contracts-game.html      # Interactive visual lab & sandbox dashboard
-```
-
----
-
-## 🎮 Interactive Visual Lab
-
-An interactive browser-based learning sandbox is included to explore concurrency behaviors, worker pools, crash simulations, and link canonicalization visually.
-
-Launch it with:
-```bash
-make open-lab
 ```
 
 ---

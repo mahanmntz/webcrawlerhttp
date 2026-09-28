@@ -10,10 +10,13 @@ __pycache__/
 *$py.class
 .pytest_cache/
 
-# Build artifacts
+# Build artifacts & logs
 dist/
-crawler-engine
+/crawler-engine
 output.json
+*.log
+build-crawler.log
+.vite/
 
 # Redis local persistence
 *.rdb
@@ -22,6 +25,3 @@ output.json
 # Environment
 .env
 .env.local
-
-# Playground 
-playground/

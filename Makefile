@@ -1,12 +1,12 @@
-.PHONY: help test-all test-go test-python test-gateway run-crawler run-parser run-gateway cluster-up cluster-down cluster-logs submit-job crawl-file get-metrics get-docs export-results seed-test seed-wikipedia check-redis read-raw-pages read-parsed-docs open-lab get-bloom get-content get-robots
+.PHONY: help start dev test-all test-go test-python test-gateway run-crawler run-parser run-gateway cluster-up cluster-down cluster-logs submit-job crawl-file get-metrics get-docs export-results seed-test seed-wikipedia check-redis read-raw-pages read-parsed-docs get-bloom get-content get-robots
 
 help:
 	@echo "Distributed Web Crawler & Scraper Monorepo"
 	@echo "=========================================="
 	@echo "Available commands:"
+	@echo "  make start              - 🚀 Start ALL services concurrently with one command (Gateway, Crawler, Parser)"
 	@echo "  make cluster-up         - Build & Launch all 4 services via Docker Compose"
 	@echo "  make cluster-down       - Stop all Docker containers cleanly"
-	@echo "  make cluster-logs       - Follow live multi-container cluster logs"
 	@echo "  make crawl-file FILE=.. - Batch ingest URLs from a line-delimited text file (default: seeds.txt)"
 	@echo "  make submit-job URL=..  - Submit a single seed URL via API Gateway"
 	@echo "  make get-metrics        - Fetch real-time cluster metrics via API Gateway"
@@ -19,7 +19,11 @@ help:
 	@echo "  make run-gateway        - Start API Gateway locally on port 3000"
 	@echo "  make run-crawler        - Start Go Crawler Engine locally"
 	@echo "  make run-parser         - Start Python Parser & Scraper locally"
-	@echo "  make open-lab           - Open interactive visual lab in browser"
+
+start:
+	@./scripts/start.sh
+
+dev: start
 
 test-all: test-go test-python test-gateway
 
@@ -123,6 +127,3 @@ read-raw-pages:
 read-parsed-docs:
 	@echo "=== Latest ParsedDocument in queue:parsed_docs ==="
 	@docker exec crawler-redis redis-cli LINDEX queue:parsed_docs 0
-
-open-lab:
-	open playground/contracts-game.html

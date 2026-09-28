@@ -6,7 +6,16 @@ import { metricsRoutes } from './routes/metrics.js';
 
 export function buildServer() {
   const app = Fastify({
-    logger: true,
+    logger: false,
+  });
+
+  // Clean structured request logger
+  app.addHook('onResponse', (request, reply, done) => {
+    if (request.url !== '/healthz') {
+      const icon = reply.statusCode < 400 ? '✅' : '⚠️';
+      console.log(`[GATEWAY] ${icon} ${request.method} ${request.url} -> HTTP ${reply.statusCode} (${Math.round(reply.elapsedTime)}ms)`);
+    }
+    done();
   });
 
   // Healthcheck endpoint

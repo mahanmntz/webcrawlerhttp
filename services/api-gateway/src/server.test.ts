@@ -1,13 +1,84 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { vi, describe, it, expect, afterAll } from 'vitest';
 import { buildServer } from './server.js';
-import { redis } from './redis.js';
+
+// In-memory mock store for isolated Redis testing without external service dependencies
+const memoryStore = {
+  bloom: new Set<string>(),
+  sets: new Map<string, Set<string>>(),
+  lists: new Map<string, string[]>(),
+  hashes: new Map<string, Record<string, string>>(),
+};
+
+vi.mock('./redis.js', () => ({
+  redis: {
+    call: vi.fn(async (cmd: string, ...args: any[]) => {
+      if (cmd === 'BF.ADD') {
+        const [, item] = args;
+        if (memoryStore.bloom.has(item)) return 0;
+        memoryStore.bloom.add(item);
+        return 1;
+      }
+      if (cmd === 'BF.INFO') {
+        return ['Capacity', 10000, 'Size', 15000, 'Number of items inserted', memoryStore.bloom.size];
+      }
+      return null;
+    }),
+    sadd: vi.fn(async (key: string, val: string) => {
+      let s = memoryStore.sets.get(key);
+      if (!s) {
+        s = new Set();
+        memoryStore.sets.set(key, s);
+      }
+      if (s.has(val)) return 0;
+      s.add(val);
+      return 1;
+    }),
+    scard: vi.fn(async (key: string) => memoryStore.sets.get(key)?.size || 0),
+    lrange: vi.fn(async (key: string, start: number, stop: number) => {
+      const list = memoryStore.lists.get(key) || [];
+      if (stop === -1) return list.slice(start);
+      return list.slice(start, stop + 1);
+    }),
+    pipeline: vi.fn(() => {
+      const ops: Array<() => [null, unknown]> = [];
+      const pipe = {
+        lpush: (key: string, val: string) => {
+          ops.push(() => {
+            let l = memoryStore.lists.get(key);
+            if (!l) {
+              l = [];
+              memoryStore.lists.set(key, l);
+            }
+            l.unshift(val);
+            return [null, l.length];
+          });
+          return pipe;
+        },
+        hset: (key: string, data: any) => {
+          ops.push(() => {
+            memoryStore.hashes.set(key, data);
+            return [null, 1];
+          });
+          return pipe;
+        },
+        llen: (key: string) => {
+          ops.push(() => [null, (memoryStore.lists.get(key) || []).length]);
+          return pipe;
+        },
+        exec: async () => ops.map((op) => op()),
+      };
+      return pipe;
+    }),
+    quit: vi.fn(async () => 'OK'),
+    on: vi.fn(),
+  },
+}));
 
 describe('API Gateway Server Tests', () => {
   const app = buildServer();
 
   afterAll(async () => {
     await app.close();
-    await redis.quit();
   });
 
   it('GET /healthz returns status healthy', async () => {
