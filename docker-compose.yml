@@ -1,6 +1,7 @@
 services:
   redis:
-    image: ${REDIS_IMAGE:-redis:7.2-alpine}
+    # redis-stack-server bundles RedisBloom; plain redis images fall back to an exact Set.
+    image: ${REDIS_IMAGE:-redis/redis-stack-server:7.2.0-v13}
     container_name: crawler-redis
     restart: unless-stopped
     ports:

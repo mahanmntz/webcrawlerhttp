@@ -59,7 +59,7 @@ flowchart TD
     Gateway -->|1. Check URL Seen| Bloom
     Gateway -->|2. Push New Seeds| FrontierQueue
 
-    FrontierQueue -->|BRPOPLPUSH| ProcessingQueue
+    FrontierQueue -->|BLMOVE + lease| ProcessingQueue
     ProcessingQueue --> WorkerPool
 
     WorkerPool -->|Acquire Host Lease| PolitenessKeys
@@ -70,7 +70,7 @@ flowchart TD
     WorkerPool -->|LPUSH RawPage| RawPagesQueue
     WorkerPool -->|LREM Acknowledge| ProcessingQueue
 
-    RawPagesQueue -->|BRPOP| ParserWorker
+    RawPagesQueue -->|BLMOVE + lease| ParserWorker
     ParserWorker -->|Clean Body & Hash| Fingerprinter
     Fingerprinter -->|Check Duplicate Body| ContentSeen
 
@@ -96,35 +96,34 @@ sequenceDiagram
     participant Py as Parser / Scraper (Python)
 
     User->>Gateway: POST /api/jobs/batch (seeds.txt)
-    Gateway->>Redis: BF.ADD / SADD frontier:bloom:url
+    Gateway->>Gateway: Canonicalize URLs
+    Gateway->>Redis: Lua: BF.ADD (or SADD) + LPUSH frontier:queue, atomically
     alt URL is Duplicate
         Gateway-->>User: 409 Deduplicated / Batch stats
     else URL is Brand New
-        Gateway->>Redis: LPUSH frontier:queue
         Gateway-->>User: 201 Enqueued
     end
 
-    Go->>Redis: BRPOPLPUSH frontier:queue -> frontier:processing
-    Go->>Redis: SET politeness:host:<domain> NX PX 1000ms
+    Go->>Redis: BLMOVE frontier:queue -> frontier:processing + lease
+    Go->>Redis: GET robots:<host> (fetch robots.txt on miss)
+    Go->>Redis: SET politeness:host:<domain> NX PX max(delay, Crawl-delay)
     alt Host Cooling Down
-        Go->>Redis: LPUSH frontier:queue (Requeue) & sleep briefly
+        Go->>Redis: ZADD frontier:delayed (wait = lease PTTL + jitter)
     else Lease Acquired
-        Go->>Web: HTTP GET (Timeout 10s, Keep-Alive, 5MB limit)
-        Web-->>Go: 200 OK HTML
-        Go->>Redis: LPUSH queue:raw_pages
-        Go->>Redis: LREM frontier:processing (Acknowledge)
+        Go->>Web: HTTP GET (SSRF guard, Keep-Alive, 5MB cap)
+        Web-->>Go: Response
+        alt 2xx HTML in scope
+            Go->>Redis: LPUSH queue:raw_pages + acknowledge
+        else Network error / 429 / 5xx
+            Go->>Redis: ZADD frontier:delayed (backoff), frontier:dead after MAX_ATTEMPTS
+        end
     end
 
-    Py->>Redis: BRPOP queue:raw_pages
-    Py->>Py: Normalize text & 64-bit SHA-256 Fingerprint
-    Py->>Redis: SADD content:seen <FP>
-    alt Duplicate Body (Mirror Page)
-        Py->>Py: Skip re-indexing duplicate content
-    else Unique Content
-        Py->>Redis: LPUSH queue:parsed_docs
-        Py->>Py: Extract <a> links & canonicalize
-        Py->>Redis: BF.ADD / SADD frontier:bloom:url & LPUSH frontier:queue (Depth+1)
-    end
+    Py->>Redis: BLMOVE queue:raw_pages -> queue:raw_pages:processing + lease
+    Py->>Py: Parse once: Markdown, links, 64-bit SHA-256 fingerprint
+    Py->>Redis: Lua: SADD content:seen, LPUSH queue:parsed_docs, stats, child links
+    Py->>Redis: Acknowledge
+    Note over Go,Py: Reapers re-queue work whose lease expired (crashed worker)
 ```
 
 ---
@@ -132,18 +131,26 @@ sequenceDiagram
 ## ✨ Core Engineering Features
 
 1. **Dual-Layer Deduplication (URL & Content)**:
-   - **URL Layer**: Uses **RedisBloom (`BF.ADD`)** on `frontier:bloom:url` for memory-efficient membership testing across millions of URLs, with seamless fallback to Redis Sets (`frontier:seen`).
+   - **URL Layer**: Uses **RedisBloom (`BF.ADD`)** on `frontier:bloom:url` (reserved for 1M URLs at 0.1% error) for memory-efficient membership testing, with fallback to an exact Redis Set (`frontier:seen`). Checking and enqueueing a URL is one atomic Lua script, so a URL is never marked seen without being queued.
+   - **Canonical URLs**: every service normalizes URLs by the same rules (scheme/host case, default ports, fragments, dot segments), verified by shared test vectors in `shared/contracts/url_canonicalization.json`.
    - **Content Layer**: Normalizes DOM bodies (stripping boilerplate scripts, headers, footers) and computes a **64-bit SHA-256 fingerprint** stored in `content:seen` to eliminate duplicate or mirror pages under different URLs.
-2. **Reliable URL Frontier**:
-   - Atomic job transition via `BRPOPLPUSH` between `frontier:queue` and `frontier:processing` to guarantee **at-least-once delivery** if a crawler worker crashes mid-download.
-3. **Per-Host Politeness & Rate-Limiting**:
-   - Prevents target server overload by enforcing atomic distributed leases (`SET politeness:host:<domain> <worker_id> NX PX <delay_ms>`). Rate-limited targets are safely requeued.
-4. **Decoupled Polyglot Architecture**:
+2. **At-Least-Once, Crash-Safe Queues**:
+   - Both the URL frontier and the raw page queue use `BLMOVE` into a processing list plus a lease with a deadline. A reaper re-queues work whose worker died, and dead-letters payloads that keep crashing workers (`frontier:dead`, `queue:raw_pages:dead`).
+   - Transient fetch failures (network errors, 429, 5xx) are retried with exponential backoff (honouring `Retry-After`) before being dead-lettered.
+   - The parser records each page's document, fingerprint, stats and child links in one Lua script, so redelivery after a crash is harmless.
+3. **Politeness: robots.txt & Per-Host Rate-Limiting**:
+   - robots.txt is fetched once per host, cached in Redis for 24h and shared by all crawler instances; disallowed URLs are never fetched, and `Crawl-delay` is honoured.
+   - Distributed per-host leases (`SET politeness:host:<domain> <worker_id> NX PX <delay_ms>`) cap each host at one request per window. Targets for a busy host are parked in a delayed queue until the host is free, instead of being spun on.
+4. **Safe by Default**:
+   - The fetcher refuses to connect to loopback, private, link-local and cloud-metadata addresses (SSRF guard, checked after DNS resolution and on every redirect). Set `ALLOW_PRIVATE_NETWORKS=true` only for local testing.
+   - `stay_in_domain` crawls are bounded by the seed's host (`scope_host`), including after redirects.
+   - Set `ADMIN_TOKEN` to require an `x-admin-token` header on `POST /api/cluster/reset`, and `CORS_ORIGIN` to restrict browser origins.
+5. **Decoupled Polyglot Architecture**:
    - **Network I/O**: Go engine handles high-concurrency HTTP downloading with persistent connection pools (`MaxIdleConnsPerHost: 50`) and response size caps.
-   - **CPU-bound Scraping**: Python service parses DOM trees, cleans boilerplate, and extracts metadata in an isolated process.
-   - **API Gateway**: Fastify (TypeScript) performs schema validation, batch ingestion pipelining, and exposes real-time telemetry.
-5. **Living Contract Verification**:
-   - Strongly typed JSON Schemas in `shared/contracts/` strictly mapped to Go structs, Python Pydantic models, and TypeScript interfaces.
+   - **CPU-bound Scraping**: Python service parses each DOM tree once, cleans boilerplate, and extracts metadata in an isolated process.
+   - **API Gateway**: Fastify (TypeScript) performs schema validation, batch ingestion, and exposes real-time telemetry and per-job progress counters (`GET /api/jobs/:id`).
+6. **Living Contract Verification**:
+   - Strongly typed JSON Schemas in `shared/contracts/` strictly mapped to Go structs, Python Pydantic models, and TypeScript interfaces. The full Redis layout is documented in [`shared/contracts/REDIS_SPEC.md`](shared/contracts/REDIS_SPEC.md).
 
 ---
 

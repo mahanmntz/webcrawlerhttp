@@ -62,16 +62,21 @@ class Supervisor:
 
     def flush_redis(self):
         try:
+            # Keep in sync with POST /api/cluster/reset in the gateway.
             keys = [
-                "frontier:queue", "frontier:processing", "frontier:seen",
-                "frontier:bloom:url", "queue:raw_pages", "queue:parsed_docs",
-                "content:seen"
+                "frontier:queue", "frontier:processing", "frontier:leases",
+                "frontier:delayed", "frontier:dead", "frontier:redeliveries",
+                "frontier:seen", "frontier:bloom:url",
+                "queue:raw_pages", "queue:raw_pages:processing", "queue:raw_pages:leases",
+                "queue:raw_pages:dead", "queue:raw_pages:redeliveries",
+                "queue:parsed_docs", "content:seen", "stats:totals",
             ]
-            self.r.delete(*keys)
+            self.r.unlink(*keys)
             for pattern in ["job:*", "politeness:*"]:
-                matched = self.r.keys(pattern)
+                # SCAN instead of KEYS so a large keyspace doesn't block Redis.
+                matched = list(self.r.scan_iter(match=pattern, count=500))
                 if matched:
-                    self.r.delete(*matched)
+                    self.r.unlink(*matched)
             self.status_msg = "🧹 All Redis queues & state successfully flushed!"
             self.log("SYSTEM", "Redis state and queues flushed cleanly.")
         except Exception as e:
@@ -256,33 +261,31 @@ class Supervisor:
             in_flight = self.r.llen("frontier:processing")
             parsed_count = self.r.llen("queue:parsed_docs")
             
-            # Unique URLs seen
+            # Unique URLs seen: exact Set fallback plus RedisBloom, if loaded.
+            seen = self.r.scard("frontier:seen")
             try:
-                seen_count = self.r.execute_command("BF.INFO", "frontier:bloom:url")
-                # parse bloom
-                seen = 0
-                if isinstance(seen_count, list):
-                    for i in range(0, len(seen_count)-1, 2):
-                        if "items" in str(seen_count[i]).lower() or "number" in str(seen_count[i]).lower():
-                            seen = int(seen_count[i+1])
+                info = self.r.execute_command("BF.INFO", "frontier:bloom:url")
+                # Pairs like "Number of filters", n, "Number of items inserted", n
+                if isinstance(info, (list, tuple)):
+                    for i in range(0, len(info) - 1, 2):
+                        if "inserted" in str(info[i]).lower():
+                            seen += int(info[i + 1])
                             break
-            except:
-                seen = self.r.scard("frontier:seen")
+            except Exception:
+                pass
 
-            # Sample docs for token savings
-            sample_docs = self.r.lrange("queue:parsed_docs", 0, 30)
-            raw_bytes, md_bytes, est_tokens = 0, 0, 0
+            # Running totals maintained by the parser for every document.
+            totals = self.r.hgetall("stats:totals")
+            raw_bytes = int(totals.get("raw_html_bytes", 0))
+            md_bytes = int(totals.get("markdown_bytes", 0))
+            est_tokens = int(totals.get("markdown_tokens", 0))
+
             latest_doc = None
-
-            for s in sample_docs:
+            latest_raw = self.r.lindex("queue:parsed_docs", 0)
+            if latest_raw:
                 try:
-                    d = json.loads(s)
-                    if not latest_doc:
-                        latest_doc = d
-                    raw_bytes += d.get("raw_html_bytes", 0)
-                    md_bytes += d.get("markdown_bytes", 0)
-                    est_tokens += d.get("estimated_tokens", 0)
-                except:
+                    latest_doc = json.loads(latest_raw)
+                except json.JSONDecodeError:
                     pass
 
             savings_pct = round((1 - (md_bytes / raw_bytes)) * 100, 1) if raw_bytes > 0 else 0.0

@@ -1,4 +1,4 @@
-.PHONY: help start dev test-all test-go test-python test-gateway run-crawler run-parser run-gateway cluster-up cluster-down cluster-logs submit-job crawl-file get-metrics get-docs export-results seed-test seed-wikipedia check-redis read-raw-pages read-parsed-docs get-bloom get-content get-robots
+.PHONY: help start dev test-all test-go test-python test-gateway run-crawler run-parser run-gateway cluster-up cluster-down cluster-logs submit-job crawl-file get-metrics get-docs export-results seed-test seed-wikipedia check-redis read-raw-pages read-parsed-docs get-dead get-bloom get-content get-robots
 
 help:
 	@echo "Distributed Web Crawler & Scraper Monorepo"
@@ -130,8 +130,18 @@ check-redis:
 	@docker exec crawler-redis redis-cli LLEN frontier:queue
 	@printf "In-Flight (frontier:processing): "
 	@docker exec crawler-redis redis-cli LLEN frontier:processing
+	@printf "Delayed / Retrying (frontier:delayed): "
+	@docker exec crawler-redis redis-cli ZCARD frontier:delayed
+	@printf "Dead-Lettered Targets (frontier:dead): "
+	@docker exec crawler-redis redis-cli LLEN frontier:dead
 	@printf "Raw Pages Ready for Python (queue:raw_pages): "
 	@docker exec crawler-redis redis-cli LLEN queue:raw_pages
+	@printf "Dead-Lettered Raw Pages (queue:raw_pages:dead): "
+	@docker exec crawler-redis redis-cli LLEN queue:raw_pages:dead
+
+get-dead:
+	@echo "=== Latest 5 dead-lettered crawl targets (frontier:dead) ==="
+	@docker exec crawler-redis redis-cli LRANGE frontier:dead 0 4
 
 read-raw-pages:
 	@echo "=== Latest Crawled RawPage in queue:raw_pages ==="
