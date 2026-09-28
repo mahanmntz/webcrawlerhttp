@@ -1,15 +1,18 @@
 import hashlib
 import re
+from dataclasses import dataclass, field
 from typing import List, Tuple
-from urllib.parse import urljoin, urlparse, urldefrag
+from urllib.parse import urljoin, urlsplit
 from bs4 import BeautifulSoup
 
-IGNORED_EXTENSIONS = {
+from app.urls import canonicalize, in_scope
+
+IGNORED_EXTENSIONS = (
     ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
     ".pdf", ".zip", ".tar", ".gz", ".rar", ".7z",
     ".mp3", ".mp4", ".avi", ".mov", ".wav",
     ".css", ".js", ".json", ".xml", ".ico", ".woff", ".woff2"
-}
+)
 
 BOILERPLATE_TAGS = [
     "script", "style", "noscript", "svg", "header", "footer",
@@ -22,12 +25,22 @@ def extract_clean_body_text(html: str) -> str:
     Remove boilerplate HTML and normalize visible body text for fingerprinting.
     """
     soup = BeautifulSoup(html, "html.parser")
+    _strip_boilerplate(soup)
+    return _normalize_for_fingerprint(_body_text(soup))
+
+
+def _body_text(soup: BeautifulSoup) -> str:
+    # <body> only: <title> differs between mirrors and would defeat content dedup.
+    return (soup.body or soup).get_text(" ", strip=True)
+
+
+def _strip_boilerplate(soup: BeautifulSoup) -> None:
     for element in soup(BOILERPLATE_TAGS):
         element.decompose()
 
-    text = soup.get_text(" ", strip=True)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip().lower()
+
+def _normalize_for_fingerprint(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip().lower()
 
 
 def body_fingerprint(text: str) -> int:
@@ -51,19 +64,20 @@ def html_to_markdown(html: str) -> str:
     Strips menus, ads, footers, and scripts while preserving headings, links, code, and lists.
     """
     soup = BeautifulSoup(html, "html.parser")
+    _strip_boilerplate(soup)
+    return _soup_to_markdown(soup)
 
-    # 1. Strip boilerplate elements
-    for el in soup(BOILERPLATE_TAGS):
-        el.decompose()
 
-    # 2. Convert headings to Markdown
+def _soup_to_markdown(soup: BeautifulSoup) -> str:
+    """Converts an already boilerplate-free soup to Markdown. Mutates the soup."""
+    # 1. Convert headings to Markdown
     for i in range(1, 7):
         for h in soup.find_all(f"h{i}"):
             h_text = h.get_text(" ", strip=True)
             if h_text:
                 h.replace_with(f"\n\n{'#' * i} {h_text}\n\n")
 
-    # 3. Convert code blocks
+    # 2. Convert code blocks
     for pre in soup.find_all("pre"):
         code_text = pre.get_text("\n", strip=True)
         pre.replace_with(f"\n\n```\n{code_text}\n```\n\n")
@@ -74,26 +88,26 @@ def html_to_markdown(html: str) -> str:
             if inline_code:
                 code.replace_with(f"`{inline_code}`")
 
-    # 4. Convert links
+    # 3. Convert links
     for a in soup.find_all("a", href=True):
         link_text = a.get_text(" ", strip=True)
         href = a["href"].strip()
         if link_text and href and not href.startswith(("#", "javascript:", "mailto:", "tel:")):
             a.replace_with(f"[{link_text}]({href})")
 
-    # 5. Convert lists
+    # 4. Convert lists
     for li in soup.find_all("li"):
         li_text = li.get_text(" ", strip=True)
         if li_text:
             li.replace_with(f"\n- {li_text}")
 
-    # 6. Convert blockquotes
+    # 5. Convert blockquotes
     for bq in soup.find_all("blockquote"):
         bq_text = bq.get_text(" ", strip=True)
         if bq_text:
             bq.replace_with(f"\n\n> {bq_text}\n\n")
 
-    # 7. Convert paragraphs
+    # 6. Convert paragraphs
     for p in soup.find_all("p"):
         p_text = p.get_text(" ", strip=True)
         if p_text:
@@ -106,56 +120,60 @@ def html_to_markdown(html: str) -> str:
     return clean_md.strip()
 
 
-def canonicalize_url(base_url: str, raw_href: str, stay_in_domain: bool = False) -> str | None:
+def canonicalize_url(
+    base_url: str,
+    raw_href: str,
+    stay_in_domain: bool = False,
+    scope_host: str | None = None,
+) -> str | None:
     """
     Normalizes a discovered link according to crawler standards:
     1. Resolves relative URLs to absolute.
-    2. Strips URL fragments (#hash).
-    3. Validates HTTP/HTTPS schemes.
-    4. Filters out non-HTML assets (images, archives, media).
-    5. Optionally restricts crawling strictly to the base domain/subdomain.
+    2. Applies the shared canonical form (see app/urls.py).
+    3. Filters out non-HTML assets (images, archives, media).
+    4. Optionally restricts crawling to scope_host (the seed's host) and its
+       subdomains. Without a scope_host, the base page's host is used.
     """
-    if not raw_href or raw_href.startswith(("javascript:", "mailto:", "tel:", "#")):
+    if not raw_href or raw_href.strip().startswith(("javascript:", "mailto:", "tel:", "#")):
         return None
 
-    # Resolve relative URL against base page URL
-    absolute_url = urljoin(base_url, raw_href.strip())
-
-    # Strip fragments (#section-1)
-    defragged, _ = urldefrag(absolute_url)
-
-    parsed = urlparse(defragged)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+    canonical = canonicalize(urljoin(base_url, raw_href.strip()))
+    if canonical is None:
         return None
 
-    # Check file extension
-    path_lower = parsed.path.lower()
-    for ext in IGNORED_EXTENSIONS:
-        if path_lower.endswith(ext):
-            return None
+    parsed = urlsplit(canonical)
+    if parsed.path.lower().endswith(IGNORED_EXTENSIONS):
+        return None
 
-    # Enforce Domain Guard if requested
     if stay_in_domain:
-        base_host = (urlparse(base_url).hostname or "").lower()
-        target_host = (parsed.hostname or "").lower()
-        if not (target_host == base_host or target_host.endswith("." + base_host)):
+        boundary = scope_host or urlsplit(base_url).hostname or ""
+        if not in_scope(parsed.hostname or "", boundary):
             return None
 
-    return defragged
+    return canonical
 
 
-def extract_content(
+@dataclass
+class PageExtraction:
+    title: str = ""
+    meta_description: str = ""
+    text_sample: str = ""
+    markdown: str = ""
+    links: List[str] = field(default_factory=list)
+    # Normalized boilerplate-free body text; empty for pages with no text.
+    fingerprint_text: str = ""
+
+
+def extract_page(
     html: str,
     base_url: str,
-    stay_in_domain: bool = False
-) -> Tuple[str, str, str, str, List[str]]:
+    stay_in_domain: bool = False,
+    scope_host: str | None = None,
+) -> PageExtraction:
     """
-    Parses HTML DOM tree:
-    - Extracts page <title>
-    - Extracts <meta name="description">
-    - Extracts clean body text sample (first 500 chars)
-    - Converts body into clean, token-efficient LLM Markdown
-    - Discovers and canonicalizes all outbound <a href> links
+    Parses the HTML once and derives everything the pipeline needs:
+    title, meta description, outbound links, text sample, fingerprint text
+    and LLM Markdown.
     """
     soup = BeautifulSoup(html, "html.parser")
 
@@ -171,21 +189,36 @@ def extract_content(
     if meta_tag and meta_tag.get("content"):
         meta_desc = meta_tag["content"].strip()
 
-    # 3. Clean Text Sample (first 500 chars)
-    clean_sample_soup = BeautifulSoup(html, "html.parser")
-    for element in clean_sample_soup(BOILERPLATE_TAGS):
-        element.decompose()
-    raw_text = clean_sample_soup.get_text(separator=" ", strip=True)
-    text_sample = raw_text[:500] if raw_text else ""
-
-    # 4. Generate LLM Markdown
-    markdown = html_to_markdown(html)
-
-    # 5. Extract Outbound Links
-    extracted_links = set()
+    # 3. Extract Outbound Links (before stripping nav/footer: they are the
+    #    main source of discovery)
+    own_url = canonicalize(base_url)
+    links = set()
     for a_tag in soup.find_all("a", href=True):
-        canonical = canonicalize_url(base_url, a_tag["href"], stay_in_domain=stay_in_domain)
-        if canonical and canonical != base_url:
-            extracted_links.add(canonical)
+        canonical = canonicalize_url(base_url, a_tag["href"], stay_in_domain=stay_in_domain, scope_host=scope_host)
+        if canonical and canonical != own_url:
+            links.add(canonical)
 
-    return title, meta_desc, text_sample, markdown, sorted(list(extracted_links))
+    # 4. Clean Text Sample & fingerprint text
+    _strip_boilerplate(soup)
+    raw_text = _body_text(soup)
+
+    return PageExtraction(
+        title=title,
+        meta_description=meta_desc,
+        text_sample=raw_text[:500],
+        # 5. Generate LLM Markdown (mutates the soup, so it goes last)
+        markdown=_soup_to_markdown(soup),
+        links=sorted(links),
+        fingerprint_text=_normalize_for_fingerprint(raw_text),
+    )
+
+
+def extract_content(
+    html: str,
+    base_url: str,
+    stay_in_domain: bool = False,
+    scope_host: str | None = None,
+) -> Tuple[str, str, str, str, List[str]]:
+    """Tuple form of extract_page: (title, meta, text_sample, markdown, links)."""
+    page = extract_page(html, base_url, stay_in_domain=stay_in_domain, scope_host=scope_host)
+    return page.title, page.meta_description, page.text_sample, page.markdown, page.links
