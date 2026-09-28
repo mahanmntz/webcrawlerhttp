@@ -258,7 +258,6 @@ make test-all
 │   └── start.sh                 # One-command concurrent runner with unified shutdown
 ├── docker-compose.yml           # Multi-service composition (Redis, Go, Py, TS)
 ├── seeds.txt                    # Sample seed URL ingestion file
-├── OVERVIEW.md                  # Comprehensive architectural deep-dive
 ├── shared/
 │   └── contracts/               # Shared JSON Schema data contracts
 │       ├── crawl_target.json    # Target URL contract (Go input)

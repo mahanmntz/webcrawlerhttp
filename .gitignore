@@ -12,10 +12,9 @@ __pycache__/
 
 # Build artifacts & logs
 dist/
-/crawler-engine
+bin/
 output.json
 *.log
-build-crawler.log
 .vite/
 
 # Redis local persistence
