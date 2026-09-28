@@ -60,12 +60,35 @@ export const metricsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(500).send({ error: 'Failed to fetch cluster metrics from Redis' });
     }
 
+    // Sample parsed documents to compute live LLM token savings
+    const sampleDocsRaw = await redis.lrange(config.queueParsedDocs, 0, 49);
+    let sampleRawBytes = 0;
+    let sampleMdBytes = 0;
+    let sampleTokens = 0;
+
+    for (const raw of sampleDocsRaw) {
+      try {
+        const doc = JSON.parse(raw);
+        if (doc.raw_html_bytes) sampleRawBytes += doc.raw_html_bytes;
+        if (doc.markdown_bytes) sampleMdBytes += doc.markdown_bytes;
+        if (doc.estimated_tokens) sampleTokens += doc.estimated_tokens;
+      } catch {
+        // skip unparseable
+      }
+    }
+
+    const tokenSavingsPct = sampleRawBytes > 0
+      ? Math.round((1 - sampleMdBytes / sampleRawBytes) * 1000) / 10
+      : 0;
+
     const metrics: ClusterMetrics = {
       pending_queue: Number(results[0][1] || 0),
       in_flight_processing: Number(results[1][1] || 0),
       raw_pages_for_parser: Number(results[2][1] || 0),
       parsed_documents_total: Number(results[3][1] || 0),
       unique_urls_seen: uniqueUrlsSeen,
+      total_markdown_tokens_est: sampleTokens,
+      token_savings_pct: tokenSavingsPct,
       timestamp: new Date().toISOString(),
     };
 

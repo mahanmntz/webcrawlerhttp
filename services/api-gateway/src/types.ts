@@ -4,6 +4,7 @@ export interface CrawlTarget {
   depth: number;
   max_depth: number;
   priority: number;
+  stay_in_domain?: boolean;
   created_at: string;
 }
 
@@ -14,6 +15,11 @@ export interface ParsedDocument {
   meta_description: string;
   extracted_links: string[];
   text_sample: string;
+  markdown?: string;
+  estimated_tokens?: number;
+  raw_html_bytes?: number;
+  markdown_bytes?: number;
+  token_savings_pct?: number;
   parsed_at: string;
 }
 
@@ -21,12 +27,14 @@ export interface CreateJobRequestBody {
   url: string;
   max_depth?: number;
   priority?: number;
+  stay_in_domain?: boolean;
 }
 
 export interface CreateBatchJobRequestBody {
   urls: string[];
   max_depth?: number;
   priority?: number;
+  stay_in_domain?: boolean;
 }
 
 export interface BatchJobResponse {
@@ -45,5 +53,7 @@ export interface ClusterMetrics {
   raw_pages_for_parser: number;
   parsed_documents_total: number;
   unique_urls_seen: number;
+  total_markdown_tokens_est?: number;
+  token_savings_pct?: number;
   timestamp: string;
 }

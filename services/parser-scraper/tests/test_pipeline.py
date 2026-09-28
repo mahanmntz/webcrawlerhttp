@@ -13,7 +13,7 @@ def test_pipeline_content_deduplication():
     raw_page = RawPage(
         job_id="job-123",
         url="https://example.com/page1",
-        html="<html><head><title>Test</title></head><body>Hello World</body></html>",
+        html="<html><head><title>Test</title></head><body><h1>Hello World</h1><p>Test body</p></body></html>",
         depth=0,
         max_depth=2,
         status_code=200,
@@ -25,6 +25,9 @@ def test_pipeline_content_deduplication():
     doc = pipeline.process_raw_page(raw_page)
     assert doc is not None
     assert doc.title == "Test"
+    assert "# Hello World" in doc.markdown
+    assert doc.estimated_tokens > 0
+    assert doc.token_savings_pct > 0
 
     # Second call with same content: duplicate detected, returns None
     doc_dup = pipeline.process_raw_page(raw_page)
@@ -56,6 +59,7 @@ def test_pipeline_bloom_fallback_and_link_discovery():
         max_depth=2,
         status_code=200,
         duration_ms=80,
+        stay_in_domain=True,
         fetched_at="2026-09-28T00:00:00Z"
     )
 

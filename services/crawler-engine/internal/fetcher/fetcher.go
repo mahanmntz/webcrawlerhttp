@@ -85,11 +85,12 @@ func (f *Fetcher) Fetch(ctx context.Context, target *models.CrawlTarget) (*model
 		URL:         resp.Request.URL.String(), // Effective URL after any redirects
 		StatusCode:  resp.StatusCode,
 		ContentType: contentType,
-		Depth:       target.Depth,
-		MaxDepth:    target.MaxDepth,
-		HTML:        string(bodyBytes),
-		DurationMs:  duration,
-		FetchedAt:   time.Now().UTC(),
+		Depth:        target.Depth,
+		MaxDepth:     target.MaxDepth,
+		StayInDomain: target.StayInDomain,
+		HTML:         string(bodyBytes),
+		DurationMs:   duration,
+		FetchedAt:    time.Now().UTC(),
 	}
 
 	return rawPage, nil

@@ -23,7 +23,7 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { url, max_depth = 2, priority = 5 } = request.body;
+      const { url, max_depth = 2, priority = 5, stay_in_domain = true } = request.body;
 
       try {
         const parsed = new URL(url);
@@ -50,6 +50,7 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
         depth: 0,
         max_depth,
         priority,
+        stay_in_domain,
         created_at: new Date().toISOString(),
       };
 
@@ -98,7 +99,7 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { urls, max_depth = 2, priority = 5 } = request.body;
+      const { urls, max_depth = 2, priority = 5, stay_in_domain = true } = request.body;
 
       // Filter and validate URLs
       const validUrls: string[] = [];
@@ -141,6 +142,7 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
             depth: 0,
             max_depth,
             priority,
+            stay_in_domain,
             created_at: now,
           };
 
