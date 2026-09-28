@@ -13,6 +13,8 @@ class CrawlTarget(BaseModel):
     max_depth: int = Field(ge=0)
     priority: int = Field(default=5, ge=1, le=10)
     stay_in_domain: bool = True
+    scope_host: str = ""
+    attempts: int = 0
     created_at: str
 
 class RawPage(BaseModel):
@@ -27,6 +29,7 @@ class RawPage(BaseModel):
     depth: int
     max_depth: int
     stay_in_domain: bool = True
+    scope_host: str = ""
     html: str
     duration_ms: int
     fetched_at: str

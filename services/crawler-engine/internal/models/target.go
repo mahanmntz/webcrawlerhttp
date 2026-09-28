@@ -11,5 +11,7 @@ type CrawlTarget struct {
 	MaxDepth     int       `json:"max_depth"`
 	Priority     int       `json:"priority"`
 	StayInDomain bool      `json:"stay_in_domain"`
+	ScopeHost    string    `json:"scope_host,omitempty"`
+	Attempts     int       `json:"attempts,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 }

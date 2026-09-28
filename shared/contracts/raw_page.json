@@ -55,6 +55,15 @@
       "type": "string",
       "format": "date-time",
       "description": "ISO-8601 timestamp when download completed"
+    },
+    "stay_in_domain": {
+      "type": "boolean",
+      "default": true,
+      "description": "Only follow links on scope_host and its subdomains"
+    },
+    "scope_host": {
+      "type": "string",
+      "description": "Host of the original seed URL; the crawl boundary when stay_in_domain is true"
     }
   },
   "additionalProperties": false

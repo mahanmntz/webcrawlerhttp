@@ -12,6 +12,7 @@ type RawPage struct {
 	Depth        int       `json:"depth"`
 	MaxDepth     int       `json:"max_depth"`
 	StayInDomain bool      `json:"stay_in_domain"`
+	ScopeHost    string    `json:"scope_host,omitempty"`
 	HTML         string    `json:"html"`
 	DurationMs   int64     `json:"duration_ms"`
 	FetchedAt    time.Time `json:"fetched_at"`

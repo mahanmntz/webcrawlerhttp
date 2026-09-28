@@ -1,0 +1,43 @@
+{
+  "description": "Shared test vectors for URL canonicalization and crawl scope. Every service that writes to the seen filter (api-gateway, parser-scraper) and every service that checks crawl scope (crawler-engine, parser-scraper) must pass these, otherwise the same page is keyed differently across services and gets crawled twice.",
+  "rules": [
+    "Only http and https URLs with a host are accepted; anything else canonicalizes to null.",
+    "Scheme and host are lowercased; internationalized hosts are converted to punycode.",
+    "Default ports (80 for http, 443 for https) are removed.",
+    "Credentials (user:pass@) are removed.",
+    "An empty path becomes '/'; '.' and '..' path segments are resolved.",
+    "The fragment is removed, and so is a bare '?' with no query.",
+    "The query string is otherwise kept verbatim."
+  ],
+  "canonicalize": [
+    { "input": "https://example.com", "expected": "https://example.com/" },
+    { "input": "  https://example.com/  ", "expected": "https://example.com/" },
+    { "input": "HTTPS://Example.COM/Path", "expected": "https://example.com/Path" },
+    { "input": "http://example.com:80/a", "expected": "http://example.com/a" },
+    { "input": "https://example.com:443/a", "expected": "https://example.com/a" },
+    { "input": "https://example.com:8443/a", "expected": "https://example.com:8443/a" },
+    { "input": "https://example.com/page#section-2", "expected": "https://example.com/page" },
+    { "input": "https://example.com/page?", "expected": "https://example.com/page" },
+    { "input": "https://example.com/search?q=go&page=2", "expected": "https://example.com/search?q=go&page=2" },
+    { "input": "https://example.com/a/b/../c/./d", "expected": "https://example.com/a/c/d" },
+    { "input": "https://user:secret@example.com/private", "expected": "https://example.com/private" },
+    { "input": "https://bücher.de/katalog", "expected": "https://xn--bcher-kva.de/katalog" },
+    { "input": "https://example.com/docs/", "expected": "https://example.com/docs/" },
+    { "input": "ftp://example.com/file", "expected": null },
+    { "input": "mailto:someone@example.com", "expected": null },
+    { "input": "javascript:void(0)", "expected": null },
+    { "input": "not a url", "expected": null },
+    { "input": "", "expected": null }
+  ],
+  "scope": [
+    { "host": "docs.python.org", "scope_host": "docs.python.org", "in_scope": true },
+    { "host": "example.com", "scope_host": "www.example.com", "in_scope": true },
+    { "host": "www.example.com", "scope_host": "example.com", "in_scope": true },
+    { "host": "blog.example.com", "scope_host": "example.com", "in_scope": true },
+    { "host": "Blog.Example.com", "scope_host": "example.com", "in_scope": true },
+    { "host": "notexample.com", "scope_host": "example.com", "in_scope": false },
+    { "host": "example.com.evil.io", "scope_host": "example.com", "in_scope": false },
+    { "host": "github.com", "scope_host": "docs.python.org", "in_scope": false },
+    { "host": "python.org", "scope_host": "docs.python.org", "in_scope": false }
+  ]
+}
