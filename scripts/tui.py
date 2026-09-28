@@ -79,25 +79,29 @@ class Supervisor:
             self.log("ERROR", f"Flush error: {e}")
 
     def enqueue_url(self, url: str):
-        try:
-            import urllib.request
-            payload = json.dumps({
-                "url": url,
-                "max_depth": self.max_depth,
-                "priority": 5,
-                "stay_in_domain": self.stay_in_domain
-            }).encode('utf-8')
-            req = urllib.request.Request(
-                f"{GATEWAY_URL}/api/jobs",
-                data=payload,
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req) as resp:
-                if resp.status == 201:
-                    self.status_msg = f"🚀 Enqueued: {url}"
-                    self.log("GATEWAY", f"Target enqueued: {url}")
-        except Exception as e:
-            self.status_msg = f"⚠️ Submit note: {e}"
+        for attempt in range(12):
+            try:
+                import urllib.request
+                payload = json.dumps({
+                    "url": url,
+                    "max_depth": self.max_depth,
+                    "priority": 5,
+                    "stay_in_domain": self.stay_in_domain
+                }).encode('utf-8')
+                req = urllib.request.Request(
+                    f"{GATEWAY_URL}/api/jobs",
+                    data=payload,
+                    headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    if resp.status in (200, 201):
+                        self.status_msg = f"🚀 Enqueued to Go Frontier: {url}"
+                        self.log("GATEWAY", f"Target URL enqueued successfully: {url}")
+                        return
+            except Exception as e:
+                time.sleep(0.75)
+        self.status_msg = f"⚠️ Could not reach Gateway to enqueue: {url}"
+        self.log("WARN", f"Failed to enqueue {url} after 12 retries")
 
     def enqueue_file(self, file_path: str):
         full_path = os.path.abspath(file_path)
@@ -108,22 +112,28 @@ class Supervisor:
             with open(full_path, "r", encoding="utf-8") as f:
                 urls = [line.strip() for line in f if line.strip() and not line.startswith("#")]
             
-            import urllib.request
-            payload = json.dumps({
-                "urls": urls,
-                "max_depth": self.max_depth,
-                "priority": 5,
-                "stay_in_domain": self.stay_in_domain
-            }).encode('utf-8')
-            req = urllib.request.Request(
-                f"{GATEWAY_URL}/api/jobs/batch",
-                data=payload,
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req) as resp:
-                res = json.loads(resp.read().decode('utf-8'))
-                self.status_msg = f"📁 Batch enqueued {res.get('enqueued_count', 0)} URLs ({res.get('deduplicated_count', 0)} deduplicated)"
-                self.log("GATEWAY", self.status_msg)
+            for attempt in range(12):
+                try:
+                    import urllib.request
+                    payload = json.dumps({
+                        "urls": urls,
+                        "max_depth": self.max_depth,
+                        "priority": 5,
+                        "stay_in_domain": self.stay_in_domain
+                    }).encode('utf-8')
+                    req = urllib.request.Request(
+                        f"{GATEWAY_URL}/api/jobs/batch",
+                        data=payload,
+                        headers={"Content-Type": "application/json"}
+                    )
+                    with urllib.request.urlopen(req, timeout=4) as resp:
+                        res = json.loads(resp.read().decode('utf-8'))
+                        self.status_msg = f"📁 Batch enqueued {res.get('enqueued_count', 0)} URLs ({res.get('deduplicated_count', 0)} deduplicated)"
+                        self.log("GATEWAY", self.status_msg)
+                        return
+                except Exception:
+                    time.sleep(0.75)
+            self.status_msg = f"⚠️ Could not reach Gateway for batch file"
         except Exception as e:
             self.status_msg = f"❌ Batch enqueue error: {e}"
             self.log("ERROR", str(e))
@@ -364,6 +374,13 @@ class Supervisor:
         return layout
 
 
+def normalize_input(text: str) -> str:
+    persian_digits = {'۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'}
+    for p, e in persian_digits.items():
+        text = text.replace(p, e)
+    return text.strip()
+
+
 def key_listener(sup: Supervisor):
     # Non-blocking key capture for macOS and Linux
     fd = sys.stdin.fileno()
@@ -373,14 +390,18 @@ def key_listener(sup: Supervisor):
         while sup.running:
             rlist, _, _ = select.select([sys.stdin], [], [], 0.2)
             if rlist:
-                key = sys.stdin.read(1).lower()
-                if key == 'l':
+                key = sys.stdin.read(1)
+                if not key:
+                    continue
+                k = key.lower()
+                # Support both English and Persian layout hotkeys
+                if k in ('l', 'م'):
                     sup.show_logs = not sup.show_logs
-                elif key == 'f':
+                elif k in ('f', 'ب'):
                     sup.flush_redis()
-                elif key == 'e':
+                elif k in ('e', 'ث'):
                     sup.export_documents()
-                elif key == 'q':
+                elif k in ('q', 'ض', '\x03'):  # Explicit quit only
                     sup.running = False
                     break
     except Exception:
@@ -409,20 +430,37 @@ def prompt_user_menu():
     console.print("  [bold cyan]3[/bold cyan] 🧹 Flush Redis queues & start clean")
     console.print("  [bold cyan]4[/bold cyan] 🚀 Resume existing Redis queue directly\n")
 
-    choice = input("Enter option [1-4] (default 1): ").strip() or "1"
+    raw_choice = input("Enter option [1-4] or paste URL directly (default 1): ").strip() or "1"
+    choice = normalize_input(raw_choice)
     url, file_path, flush = None, None, False
 
-    if choice == "1":
-        url = input("Enter Target URL [https://fastify.dev]: ").strip() or "https://fastify.dev"
+    # Check if user directly pasted a URL
+    if choice.startswith("http://") or choice.startswith("https://") or ("." in choice and "/" in choice):
+        url = choice
+    elif choice == "1":
+        raw_url = input("Enter Target URL [https://fastify.dev]: ").strip() or "https://fastify.dev"
+        url = raw_url
     elif choice == "2":
         file_path = input("Enter Seed File Path [seeds.txt]: ").strip() or "seeds.txt"
     elif choice == "3":
         flush = True
-        sub_choice = input("Flush done! Now crawl: [1] URL, [2] File, [3] Just start: ").strip() or "1"
-        if sub_choice == "1":
+        sub_choice = normalize_input(input("Flush done! Now crawl: [1] URL, [2] File, [3] Just start: ").strip() or "1")
+        if sub_choice.startswith("http://") or sub_choice.startswith("https://"):
+            url = sub_choice
+        elif sub_choice == "1":
             url = input("Enter Target URL [https://fastify.dev]: ").strip() or "https://fastify.dev"
         elif sub_choice == "2":
             file_path = input("Enter Seed File Path [seeds.txt]: ").strip() or "seeds.txt"
+    elif choice == "4":
+        pass  # Resume existing Redis state
+    else:
+        # If user entered a domain without protocol (e.g. fastify.dev or mahanmontazeri.ir)
+        if "." in choice:
+            url = choice
+
+    # Ensure URL has protocol
+    if url and not url.startswith("http://") and not url.startswith("https://"):
+        url = "https://" + url
 
     return url, file_path, flush
 
