@@ -221,7 +221,34 @@ The API Gateway and Interactive Web Dashboard run at `http://localhost:3000`.
 | `GET` | `/api/metrics` | Real-time cluster & token metrics | None | `200 OK` (queues, Bloom, token savings %) |
 | `GET` | `/api/documents` | Retrieve latest parsed documents | `?limit=20` (max 50) | `200 OK` with Markdown documents array |
 | `GET` | `/api/documents/export` | Export all documents to JSON file | None | `200 OK` (`crawled_documents.json`) |
+| `POST` | `/api/cluster/reset` | 🧹 Flush all Redis queues and state | None | `200 OK` |
 | `GET` | `/healthz` | Cluster health probe | None | `200 OK` `{"status": "healthy"}` |
+
+---
+
+## 🖥️ Interactive Terminal UI (TUI) & Hotkeys
+
+When you run `make start`, SpiderRAG launches a live, interactive terminal console powered by Python's `rich` library:
+
+```text
+╭────────────────────── SpiderRAG Engine ──────────────────────╮
+│ Target: https://docs.python.org (Domain Scoped)              │
+│ Progress: [████████████████░░░░] 72% | In-Flight Workers: 3  │
+├──────────────────────────────────────────────────────────────┤
+│ ⏳ Pending: 12   📄 Markdown Docs: 48   🛡️ Seen: 60           │
+│ 📉 LLM Token Savings: -92.4% (1.4MB ➔ 110KB)                 │
+│ 🧠 Total Extracted Tokens: ~24,500                          │
+│ 🔗 Latest: https://docs.python.org/3/tutorial/errors.html    │
+├──────────────────────────────────────────────────────────────┤
+│ [L] Toggle Full Logs │ [F] Flush Queues │ [E] Export │ [Q] Quit
+╰──────────────────────────────────────────────────────────────╯
+```
+
+### Interactive Hotkeys:
+- **`[L]` (Toggle Logs)**: Switch between quiet telemetry mode and live scrolling logs on the fly!
+- **`[F]` (Flush Queues)**: Reset and wipe all Redis queues and state to start clean.
+- **`[E]` (Export JSON)**: Dump all crawled and extracted Markdown documents into a timestamped JSON file.
+- **`[Q]` (Quit Cleanly)**: Broadcast graceful shutdown signals (`SIGINT`) to all microservices.
 
 ---
 
@@ -229,18 +256,18 @@ The API Gateway and Interactive Web Dashboard run at `http://localhost:3000`.
 
 | Target | Description |
 | :--- | :--- |
-| `make start` | 🚀 **One-Command Launch**: Starts Redis check, Gateway, Crawler, and Parser concurrently |
+| `make start` | 🚀 **Interactive TUI**: Starts supervisor with live telemetry, hotkeys, and menu |
+| `make start-raw` | Start all services with raw stdout streaming |
+| `make crawl URL=https://...` | 🎯 Crawl a single website directly (cleans old queues & scopes domain) |
+| `make crawl-file FILE=seeds.txt` | 📁 Batch ingest and crawl URLs from a text file |
+| `make flush` / `make reset` | 🧹 Flush all Redis queues, Bloom filters, and crawler state |
 | `make cluster-up` | Build and start all 4 services via Docker Compose |
 | `make cluster-down` | Stop and remove cluster containers cleanly |
-| `make crawl-file FILE=seeds.txt` | Ingest batch URLs from file |
-| `make submit-job URL=...` | Submit a single seed URL |
-| `make get-metrics` | Fetch real-time cluster metrics |
+| `make submit-job URL=...` | Submit a single seed URL via API Gateway curl |
+| `make get-metrics` | Fetch real-time cluster metrics via API Gateway |
 | `make get-docs` | Fetch recent extracted documents |
 | `make export-results` | Export all documents to `output.json` |
 | `make test-all` | Run test suites across Go, Python, and TypeScript |
-| `make test-go` | Run Go unit tests |
-| `make test-python` | Run Python pytest suite |
-| `make test-gateway` | Run Fastify Vitest suite |
 
 ---
 

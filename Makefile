@@ -4,24 +4,37 @@ help:
 	@echo "Distributed Web Crawler & Scraper Monorepo"
 	@echo "=========================================="
 	@echo "Available commands:"
-	@echo "  make start              - 🚀 Start ALL services concurrently with one command (Gateway, Crawler, Parser)"
+	@echo "  make start              - 🚀 Start interactive TUI dashboard & supervisor"
+	@echo "  make start-raw          - Start services with raw stdout streaming"
+	@echo "  make crawl URL=..       - Crawl a target URL directly (e.g. make crawl URL=https://fastify.dev)"
+	@echo "  make crawl-file FILE=.. - Batch ingest URLs from file (default: seeds.txt)"
+	@echo "  make flush / make reset - 🧹 Flush all Redis queues, seen sets, and crawler state"
 	@echo "  make cluster-up         - Build & Launch all 4 services via Docker Compose"
 	@echo "  make cluster-down       - Stop all Docker containers cleanly"
-	@echo "  make crawl-file FILE=.. - Batch ingest URLs from a line-delimited text file (default: seeds.txt)"
 	@echo "  make submit-job URL=..  - Submit a single seed URL via API Gateway"
 	@echo "  make get-metrics        - Fetch real-time cluster metrics via API Gateway"
 	@echo "  make get-docs           - Fetch latest extracted documents via API Gateway"
 	@echo "  make export-results     - Export all parsed documents to output.json"
 	@echo "  make test-all           - Run all unit tests across Go, Python, and TypeScript"
-	@echo "  make test-go            - Run Go unit tests"
-	@echo "  make test-python        - Run Python unit tests"
-	@echo "  make test-gateway       - Run TypeScript / Fastify unit tests"
-	@echo "  make run-gateway        - Start API Gateway locally on port 3000"
-	@echo "  make run-crawler        - Start Go Crawler Engine locally"
-	@echo "  make run-parser         - Start Python Parser & Scraper locally"
 
 start:
 	@./scripts/start.sh
+
+start-raw:
+	@./scripts/start.sh --raw
+
+crawl:
+	@./scripts/start.sh --url "$(if $(URL),$(URL),https://fastify.dev)" --flush
+
+crawl-file:
+	@./scripts/start.sh --file "$(if $(FILE),$(FILE),seeds.txt)" --flush
+
+flush:
+	@echo "🧹 Flushing Redis queues and crawler state..."
+	@docker exec crawler-redis redis-cli flushall >/dev/null 2>&1 || (curl -s -X POST http://localhost:3000/api/cluster/reset | jq . || echo "Cleaned")
+	@echo "✅ Redis queues flushed cleanly."
+
+reset: flush
 
 dev: start
 
@@ -62,7 +75,7 @@ submit-job:
 	  -H "Content-Type: application/json" \
 	  -d '{"url":"$(if $(URL),$(URL),https://news.ycombinator.com)","max_depth":2,"priority":5}'
 
-crawl-file:
+crawl-file-api:
 	@test -f $(if $(FILE),$(FILE),seeds.txt) || { echo "File not found: $(if $(FILE),$(FILE),seeds.txt)"; exit 1; }
 	@node -e ' \
 	  const fs = require("fs"); \

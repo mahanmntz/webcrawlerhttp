@@ -607,6 +607,9 @@
         <div class="pulse-dot"></div>
         <span>Cluster: <strong style="color: var(--accent-emerald);">ONLINE</strong></span>
       </div>
+      <button class="btn btn-secondary" style="border-color: rgba(244, 63, 94, 0.4); color: #fda4af;" onclick="flushCluster()">
+        🧹 Flush Queues
+      </button>
       <button class="btn btn-secondary" onclick="exportDocuments()">
         📥 Export Dataset (JSON)
       </button>
@@ -903,6 +906,22 @@
 
     function exportDocuments() {
       window.location.href = '/api/documents/export';
+    }
+
+    async function flushCluster() {
+      if (!confirm('⚠️ Are you sure you want to flush all queues and crawled data?')) return;
+      try {
+        const res = await fetch('/api/cluster/reset', { method: 'POST' });
+        if (res.ok) {
+          showToast('🧹 Cluster state and queues flushed cleanly!');
+          fetchMetrics();
+          fetchDocuments();
+        } else {
+          showToast('❌ Failed to flush cluster state', false);
+        }
+      } catch {
+        showToast('❌ Network error', false);
+      }
     }
 
     function escapeHtml(text) {

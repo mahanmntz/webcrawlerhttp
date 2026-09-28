@@ -20,29 +20,15 @@ if ! nc -z localhost 6379 >/dev/null 2>&1; then
 fi
 
 echo "✅ Redis Broker connected (localhost:6379)"
-echo "🚀 Starting API Gateway, Go Crawler, and Python Parser..."
-echo "👉 Press Ctrl+C at any time to cleanly stop all services."
-echo "======================================================="
 
-# Trap to terminate all child background processes on exit
-trap 'echo ""; echo "🛑 Shutting down all services gracefully..."; kill $(jobs -p) 2>/dev/null || true; exit 0' SIGINT SIGTERM EXIT
-
-# Start API Gateway
-npm --prefix services/api-gateway run dev &
-PID_GATEWAY=$!
-
-# Start Python Parser
-PYTHONPATH=services/parser-scraper \
-REDIS_HOST=localhost \
-REDIS_PORT=6379 \
-services/parser-scraper/.venv/bin/python services/parser-scraper/parser_worker.py &
-PID_PARSER=$!
-
-# Start Go Crawler Engine
-REDIS_ADDR=localhost:6379 \
-WORKER_COUNT=3 \
-go run ./services/crawler-engine &
-PID_CRAWLER=$!
-
-# Wait for any process to exit
-wait
+if [ "$1" = "--raw" ]; then
+  echo "🚀 Starting raw stdout streaming mode..."
+  trap 'echo ""; echo "🛑 Shutting down all services gracefully..."; kill $(jobs -p) 2>/dev/null || true; exit 0' SIGINT SIGTERM EXIT
+  npm --prefix services/api-gateway run dev &
+  PYTHONPATH=services/parser-scraper REDIS_HOST=localhost REDIS_PORT=6379 services/parser-scraper/.venv/bin/python services/parser-scraper/parser_worker.py &
+  REDIS_ADDR=localhost:6379 WORKER_COUNT=3 go run ./services/crawler-engine &
+  wait
+else
+  # Launch Interactive Terminal UI Dashboard
+  exec services/parser-scraper/.venv/bin/python scripts/tui.py "$@"
+fi

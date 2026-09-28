@@ -101,14 +101,14 @@ export const metricsRoutes: FastifyPluginAsync = async (fastify) => {
     const rawDocs = await redis.lrange(config.queueParsedDocs, 0, limit - 1);
 
     const documents: ParsedDocument[] = rawDocs
-      .map((item) => {
+      .map((item: string) => {
         try {
           return JSON.parse(item);
         } catch {
           return null;
         }
       })
-      .filter(Boolean);
+      .filter((doc): doc is ParsedDocument => doc !== null);
 
     return reply.send({
       count: documents.length,
@@ -121,14 +121,14 @@ export const metricsRoutes: FastifyPluginAsync = async (fastify) => {
     const rawDocs = await redis.lrange(config.queueParsedDocs, 0, -1);
 
     const documents: ParsedDocument[] = rawDocs
-      .map((item) => {
+      .map((item: string) => {
         try {
           return JSON.parse(item);
         } catch {
           return null;
         }
       })
-      .filter(Boolean);
+      .filter((doc): doc is ParsedDocument => doc !== null);
 
     reply.header('Content-Type', 'application/json; charset=utf-8');
     reply.header('Content-Disposition', 'attachment; filename="crawled_documents.json"');
@@ -138,5 +138,43 @@ export const metricsRoutes: FastifyPluginAsync = async (fastify) => {
       total_count: documents.length,
       documents,
     });
+  });
+
+  // Reset / Flush all crawler queues and state
+  fastify.post('/api/cluster/reset', async (request, reply) => {
+    try {
+      const keysToDelete = [
+        config.queueFrontier,
+        config.queueProcessing,
+        config.setSeenUrls,
+        config.bloomUrlSeen,
+        config.queueRawPages,
+        config.queueParsedDocs,
+        config.contentSeen,
+      ];
+
+      // Delete specific known keys
+      await redis.del(...keysToDelete);
+
+      // Delete pattern keys: job:* and politeness:*
+      const jobKeys = await redis.keys('job:*');
+      if (jobKeys.length > 0) {
+        await redis.del(...jobKeys);
+      }
+
+      const politenessKeys = await redis.keys('politeness:*');
+      if (politenessKeys.length > 0) {
+        await redis.del(...politenessKeys);
+      }
+
+      return reply.send({
+        status: 'reset_successful',
+        message: 'All queues, seen sets, and crawler state flushed cleanly',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('[cluster.reset] Error flushing Redis state:', err);
+      return reply.status(500).send({ error: 'Failed to flush cluster state' });
+    }
   });
 };
