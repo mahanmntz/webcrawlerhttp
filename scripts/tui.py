@@ -40,12 +40,15 @@ if not os.path.exists(VENV_PYTHON):
 console = Console()
 
 class Supervisor:
-    def __init__(self, target_url=None, target_file=None, flush_on_start=False, max_depth=2, stay_in_domain=True):
+    def __init__(self, target_url=None, target_file=None, flush_on_start=False, max_depth=2, stay_in_domain=True, max_pages=None):
         self.target_url = target_url
         self.target_file = target_file
         self.flush_on_start = flush_on_start
         self.max_depth = max_depth
         self.stay_in_domain = stay_in_domain
+        self.max_pages = max_pages
+        self.start_time = time.time()
+        self.mission_complete = False
 
         self.r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
         self.processes = {}
@@ -267,7 +270,6 @@ class Supervisor:
             seen = self.r.scard("frontier:seen")
             try:
                 info = self.r.execute_command("BF.INFO", "frontier:bloom:url")
-                # Pairs like "Number of filters", n, "Number of items inserted", n
                 if isinstance(info, (list, tuple)):
                     for i in range(0, len(info) - 1, 2):
                         if "inserted" in str(info[i]).lower():
@@ -282,6 +284,26 @@ class Supervisor:
             md_bytes = int(totals.get("markdown_bytes", 0))
             est_tokens = int(totals.get("markdown_tokens", 0))
 
+            # Memory from Redis
+            try:
+                mem_info = self.r.info("memory")
+                redis_ram = mem_info.get("used_memory_human", "N/A")
+            except Exception:
+                redis_ram = "N/A"
+
+            elapsed = max(1.0, time.time() - self.start_time)
+            speed_pages = f"{parsed_count / elapsed:.1f} doc/s" if parsed_count > 0 else "0.0 doc/s"
+
+            def fmt_bytes(b):
+                if b >= 1024 * 1024:
+                    return f"{b / (1024*1024):.2f} MB"
+                elif b >= 1024:
+                    return f"{b / 1024:.1f} KB"
+                return f"{b} B"
+
+            raw_str = fmt_bytes(raw_bytes)
+            md_str = fmt_bytes(md_bytes)
+
             latest_doc = None
             latest_raw = self.r.lindex("queue:parsed_docs", 0)
             if latest_raw:
@@ -292,6 +314,12 @@ class Supervisor:
 
             savings_pct = round((1 - (md_bytes / raw_bytes)) * 100, 1) if raw_bytes > 0 else 0.0
 
+            # Check completion goal
+            if self.max_pages and parsed_count >= self.max_pages and not self.mission_complete:
+                self.mission_complete = True
+                self.status_msg = f"🎉 Target of {self.max_pages} page(s) reached in {elapsed:.1f}s!"
+                self.log("DONE", self.status_msg)
+
             return {
                 "pending": pending,
                 "in_flight": in_flight,
@@ -299,44 +327,57 @@ class Supervisor:
                 "seen": seen,
                 "savings_pct": savings_pct,
                 "est_tokens": est_tokens,
+                "raw_str": raw_str,
+                "md_str": md_str,
+                "redis_ram": redis_ram,
+                "speed_pages": speed_pages,
+                "elapsed": int(elapsed),
                 "latest_doc": latest_doc
             }
         except Exception:
-            return {"pending": 0, "in_flight": 0, "parsed": 0, "seen": 0, "savings_pct": 0.0, "est_tokens": 0, "latest_doc": None}
+            return {
+                "pending": 0, "in_flight": 0, "parsed": 0, "seen": 0,
+                "savings_pct": 0.0, "est_tokens": 0, "raw_str": "0 B", "md_str": "0 B",
+                "redis_ram": "N/A", "speed_pages": "0.0 doc/s", "elapsed": 0, "latest_doc": None
+            }
 
     def render(self) -> Layout:
         metrics = self.get_metrics()
         layout = Layout()
 
-        if self.show_logs:
-            layout.split_column(
-                Layout(name="header", size=10),
-                Layout(name="body", ratio=1),
-                Layout(name="footer", size=3)
-            )
-        else:
-            layout.split_column(
-                Layout(name="header", size=13),
-                Layout(name="body", ratio=1),
-                Layout(name="footer", size=3)
-            )
+        header_size = 11
+        layout.split_column(
+            Layout(name="header", size=header_size),
+            Layout(name="body", ratio=1),
+            Layout(name="footer", size=3)
+        )
 
-        # Header: Metrics Table
+        # Header: 2-Row Comprehensive Metrics Grid
         grid = Table.grid(expand=True)
         grid.add_column(justify="center", ratio=1)
         grid.add_column(justify="center", ratio=1)
         grid.add_column(justify="center", ratio=1)
         grid.add_column(justify="center", ratio=1)
         grid.add_column(justify="center", ratio=1)
-        grid.add_column(justify="center", ratio=1)
+
+        docs_label = f"{metrics['parsed']:,}"
+        if self.max_pages:
+            docs_label += f" [dim]/ {self.max_pages}[/dim]"
 
         grid.add_row(
             f"[bold yellow]⏳ Pending[/bold yellow]\n[bold white]{metrics['pending']:,}[/bold white]",
-            f"[bold cyan]⚡ In-Flight[/bold cyan]\n[bold white]{metrics['in_flight']}[/bold white]",
-            f"[bold blue]🛡️ Filtered (Seen)[/bold blue]\n[bold white]{metrics['seen']:,}[/bold white]",
-            f"[bold green]📄 Clean Docs[/bold green]\n[bold white]{metrics['parsed']:,}[/bold white]",
+            f"[bold cyan]⚡ In-Flight[/bold cyan]\n[bold white]{metrics['in_flight']} workers[/bold white]",
+            f"[bold green]📄 Clean Docs[/bold green]\n[bold white]{docs_label}[/bold white]",
             f"[bold emerald]📉 Token Savings[/bold emerald]\n[bold green]-{metrics['savings_pct']}%[/bold green]",
             f"[bold magenta]🧠 LLM Tokens[/bold magenta]\n[bold white]~{metrics['est_tokens']:,}[/bold white]",
+        )
+        grid.add_row("", "", "", "", "")  # Subtle Row Spacer
+        grid.add_row(
+            f"[bold blue]🌐 Data Traffic[/bold blue]\n[dim]{metrics['raw_str']} ➔ [bold green]{metrics['md_str']}[/bold green][/dim]",
+            f"[bold red]💾 Redis RAM[/bold red]\n[bold white]{metrics['redis_ram']}[/bold white]",
+            f"[bold yellow]⚡ Throughput[/bold yellow]\n[bold white]{metrics['speed_pages']}[/bold white]",
+            f"[bold cyan]⏱️ Elapsed[/bold cyan]\n[bold white]{metrics['elapsed']}s[/bold white]",
+            f"[bold white]🎯 Target Mode[/bold white]\n[dim]{'Single Page' if self.max_depth == 0 else 'Recursive Crawl'}[/dim]",
         )
 
         header_panel = Panel(
@@ -454,44 +495,67 @@ def prompt_user_menu():
     )
     console.print(banner)
     console.print("[bold white]Choose your mission mode:[/bold white]\n")
-    console.print("  [bold cyan]1[/bold cyan] 🎯 Single URL Mission (e.g. https://fastify.dev)")
-    console.print("  [bold cyan]2[/bold cyan] 📁 File Batch Mission (e.g. seeds.txt)")
-    console.print("  [bold cyan]3[/bold cyan] 🧹 Flush Redis queues & start clean")
-    console.print("  [bold cyan]4[/bold cyan] 🚀 Resume existing Redis queue directly\n")
+    console.print("  [bold cyan]1[/bold cyan] 📄 Single Page Scrape (Exact 1 URL, depth 0 - fast & finishes immediately)")
+    console.print("  [bold cyan]2[/bold cyan] 🌐 Recursive Site Crawl (Crawls domain links with page limit)")
+    console.print("  [bold cyan]3[/bold cyan] 📁 File Batch Mission (e.g. seeds.txt)")
+    console.print("  [bold cyan]4[/bold cyan] 🧹 Flush Redis queues & start clean")
+    console.print("  [bold cyan]5[/bold cyan] 🚀 Resume existing Redis queue directly\n")
 
-    raw_choice = input("Enter option [1-4] or paste URL directly (default 1): ").strip() or "1"
+    raw_choice = input("Enter option [1-5] or paste URL directly (default 1): ").strip() or "1"
     choice = normalize_input(raw_choice)
     url, file_path, flush = None, None, False
+    depth, max_pages = 2, None
 
     # Check if user directly pasted a URL
     if choice.startswith("http://") or choice.startswith("https://") or ("." in choice and "/" in choice):
         url = choice
+        sub = normalize_input(input("Mode: [1] Single Page only (fast), [2] Recursive crawl [default 1]: ").strip() or "1")
+        if sub == "1":
+            depth = 0
+            max_pages = 1
+        else:
+            depth = 2
+            max_pages = int(normalize_input(input("Max pages to scrape [default 30]: ").strip() or "30"))
     elif choice == "1":
         raw_url = input("Enter Target URL [https://fastify.dev]: ").strip() or "https://fastify.dev"
         url = raw_url
+        depth = 0
+        max_pages = 1
     elif choice == "2":
-        file_path = input("Enter Seed File Path [seeds.txt]: ").strip() or "seeds.txt"
+        raw_url = input("Enter Target URL [https://fastify.dev]: ").strip() or "https://fastify.dev"
+        url = raw_url
+        depth = 2
+        limit_input = normalize_input(input("Max pages to scrape [default 30]: ").strip() or "30")
+        max_pages = int(limit_input) if limit_input.isdigit() else 30
     elif choice == "3":
-        flush = True
-        sub_choice = normalize_input(input("Flush done! Now crawl: [1] URL, [2] File, [3] Just start: ").strip() or "1")
-        if sub_choice.startswith("http://") or sub_choice.startswith("https://"):
-            url = sub_choice
-        elif sub_choice == "1":
-            url = input("Enter Target URL [https://fastify.dev]: ").strip() or "https://fastify.dev"
-        elif sub_choice == "2":
-            file_path = input("Enter Seed File Path [seeds.txt]: ").strip() or "seeds.txt"
+        file_path = input("Enter Seed File Path [seeds.txt]: ").strip() or "seeds.txt"
     elif choice == "4":
+        flush = True
+        sub_choice = normalize_input(input("Flush done! Now crawl: [1] Single Page, [2] Recursive, [3] File, [4] Just start: ").strip() or "1")
+        if sub_choice == "1":
+            url = input("Enter Target URL [https://fastify.dev]: ").strip() or "https://fastify.dev"
+            depth = 0
+            max_pages = 1
+        elif sub_choice == "2":
+            url = input("Enter Target URL [https://fastify.dev]: ").strip() or "https://fastify.dev"
+            depth = 2
+            max_pages = 30
+        elif sub_choice == "3":
+            file_path = input("Enter Seed File Path [seeds.txt]: ").strip() or "seeds.txt"
+    elif choice == "5":
         pass  # Resume existing Redis state
     else:
         # If user entered a domain without protocol (e.g. fastify.dev or mahanmontazeri.ir)
         if "." in choice:
             url = choice
+            depth = 0
+            max_pages = 1
 
     # Ensure URL has protocol
     if url and not url.startswith("http://") and not url.startswith("https://"):
         url = "https://" + url
 
-    return url, file_path, flush
+    return url, file_path, flush, depth, max_pages
 
 
 def main():
@@ -500,6 +564,7 @@ def main():
     parser.add_argument("--file", help="File containing list of URLs")
     parser.add_argument("--flush", action="store_true", help="Flush Redis state before starting")
     parser.add_argument("--depth", type=int, default=2, help="Crawl depth (default: 2)")
+    parser.add_argument("--max-pages", type=int, default=None, help="Maximum number of pages to scrape")
     parser.add_argument("--no-guard", action="store_true", help="Disable domain boundary guard")
     parser.add_argument("--no-tui", action="store_true", help="Run in headless terminal mode")
     args = parser.parse_args()
@@ -508,16 +573,19 @@ def main():
     url = args.url
     file_path = args.file
     flush = args.flush
+    depth = args.depth
+    max_pages = args.max_pages
 
     if not url and not file_path and not flush and sys.stdin.isatty():
-        url, file_path, flush = prompt_user_menu()
+        url, file_path, flush, depth, max_pages = prompt_user_menu()
 
     sup = Supervisor(
         target_url=url,
         target_file=file_path,
         flush_on_start=flush,
-        max_depth=args.depth,
-        stay_in_domain=not args.no_guard
+        max_depth=depth,
+        stay_in_domain=not args.no_guard,
+        max_pages=max_pages
     )
 
     if flush:
