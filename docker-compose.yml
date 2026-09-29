@@ -6,6 +6,9 @@ services:
     restart: unless-stopped
     ports:
       - "${REDIS_PORT:-6379}:6379"
+    environment:
+      # Append-only file: queues, leases and job state survive a Redis restart.
+      - REDIS_ARGS=--appendonly yes --appendfsync everysec
     volumes:
       - redis_data:/data
     healthcheck:
@@ -62,6 +65,10 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - POLL_TIMEOUT_SEC=2
+      # Durable Markdown copy of every parsed document, one folder per job.
+      - OUTPUT_DIR=/data/output
+    volumes:
+      - ./output:/data/output
     depends_on:
       redis:
         condition: service_healthy

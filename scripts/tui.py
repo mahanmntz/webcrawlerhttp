@@ -64,7 +64,8 @@ class Supervisor:
         try:
             # Keep in sync with POST /api/cluster/reset in the gateway.
             keys = [
-                "frontier:queue", "frontier:processing", "frontier:leases",
+                "frontier:queue", "frontier:processing", "frontier:hosts",
+                "frontier:scheduled", "frontier:leases",
                 "frontier:delayed", "frontier:dead", "frontier:redeliveries",
                 "frontier:seen", "frontier:bloom:url",
                 "queue:raw_pages", "queue:raw_pages:processing", "queue:raw_pages:leases",
@@ -72,7 +73,7 @@ class Supervisor:
                 "queue:parsed_docs", "content:seen", "stats:totals",
             ]
             self.r.unlink(*keys)
-            for pattern in ["job:*", "politeness:*"]:
+            for pattern in ["job:*", "frontier:host:*", "raw_page:*"]:
                 # SCAN instead of KEYS so a large keyspace doesn't block Redis.
                 matched = list(self.r.scan_iter(match=pattern, count=500))
                 if matched:
@@ -257,9 +258,10 @@ class Supervisor:
 
     def get_metrics(self):
         try:
-            pending = self.r.llen("frontier:queue")
+            # Ingest list plus targets already routed to per-host queues.
+            pending = self.r.llen("frontier:queue") + int(self.r.get("frontier:scheduled") or 0)
             in_flight = self.r.llen("frontier:processing")
-            parsed_count = self.r.llen("queue:parsed_docs")
+            parsed_count = int(self.r.hget("stats:totals", "documents") or 0)
             
             # Unique URLs seen: exact Set fallback plus RedisBloom, if loaded.
             seen = self.r.scard("frontier:seen")

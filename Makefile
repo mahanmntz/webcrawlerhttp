@@ -1,4 +1,4 @@
-.PHONY: help start dev test-all test-go test-python test-gateway run-crawler run-parser run-gateway cluster-up cluster-down cluster-logs submit-job crawl-file get-metrics get-docs export-results seed-test seed-wikipedia check-redis read-raw-pages read-parsed-docs get-dead get-bloom get-content get-robots
+.PHONY: help start dev test-all test-go test-python test-gateway run-crawler run-parser run-gateway cluster-up cluster-down cluster-logs submit-job crawl-file get-metrics get-docs export-results seed-test seed-wikipedia check-redis read-raw-pages read-parsed-docs get-dead replay-dead prom-metrics get-bloom get-content get-robots
 
 help:
 	@echo "Distributed Web Crawler & Scraper Monorepo"
@@ -126,8 +126,12 @@ seed-wikipedia:
 
 check-redis:
 	@echo "=== Redis Queue Status ==="
-	@printf "Pending (frontier:queue): "
+	@printf "Ingest (frontier:queue): "
 	@docker exec crawler-redis redis-cli LLEN frontier:queue
+	@printf "Scheduled in host queues (frontier:scheduled): "
+	@docker exec crawler-redis redis-cli GET frontier:scheduled
+	@printf "Active hosts (frontier:hosts): "
+	@docker exec crawler-redis redis-cli ZCARD frontier:hosts
 	@printf "In-Flight (frontier:processing): "
 	@docker exec crawler-redis redis-cli LLEN frontier:processing
 	@printf "Delayed / Retrying (frontier:delayed): "
@@ -140,12 +144,18 @@ check-redis:
 	@docker exec crawler-redis redis-cli LLEN queue:raw_pages:dead
 
 get-dead:
-	@echo "=== Latest 5 dead-lettered crawl targets (frontier:dead) ==="
-	@docker exec crawler-redis redis-cli LRANGE frontier:dead 0 4
+	@curl -s "http://localhost:3000/api/dead-letters?queue=frontier&limit=5" | python3 -m json.tool
+
+replay-dead:
+	@curl -s -X POST http://localhost:3000/api/dead-letters/replay -H 'content-type: application/json' \
+		-H "x-admin-token: $${ADMIN_TOKEN}" -d '{"queue":"$(or $(QUEUE),frontier)","count":$(or $(COUNT),100)}' | python3 -m json.tool
+
+prom-metrics:
+	@curl -s http://localhost:3000/metrics
 
 read-raw-pages:
-	@echo "=== Latest Crawled RawPage in queue:raw_pages ==="
-	@docker exec crawler-redis redis-cli LINDEX queue:raw_pages 0
+	@echo "=== Latest Crawled RawPage waiting in queue:raw_pages (payload in raw_page:<id>) ==="
+	@docker exec crawler-redis sh -c 'redis-cli GET "raw_page:$$(redis-cli LINDEX queue:raw_pages 0)"' 
 
 read-parsed-docs:
 	@echo "=== Latest ParsedDocument in queue:parsed_docs ==="

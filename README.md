@@ -104,26 +104,21 @@ sequenceDiagram
         Gateway-->>User: 201 Enqueued
     end
 
-    Go->>Redis: BLMOVE frontier:queue -> frontier:processing + lease
+    Go->>Redis: Route: frontier:queue -> frontier:host:<host> (priority order)
+    Go->>Redis: Claim: first host whose politeness window is open -> processing + lease, host locked
     Go->>Redis: GET robots:<host> (fetch robots.txt on miss)
-    Go->>Redis: SET politeness:host:<domain> NX PX max(delay, Crawl-delay)
-    alt Host Cooling Down
-        Go->>Redis: ZADD frontier:delayed (wait = lease PTTL + jitter)
-    else Lease Acquired
-        Go->>Web: HTTP GET (SSRF guard, Keep-Alive, 5MB cap)
-        Web-->>Go: Response
-        alt 2xx HTML in scope
-            Go->>Redis: LPUSH queue:raw_pages + acknowledge
-        else Network error / 429 / 5xx
-            Go->>Redis: ZADD frontier:delayed (backoff), frontier:dead after MAX_ATTEMPTS
-        end
+    Go->>Web: HTTP GET (SSRF guard, Keep-Alive, 5MB cap)
+    Web-->>Go: Response
+    alt 2xx HTML in scope
+        Go->>Redis: Settle: SET raw_page:<id>, LPUSH queue:raw_pages <id>, reopen host after max(delay, Crawl-delay)
+    else Network error / 429 / 5xx
+        Go->>Redis: Settle: ZADD frontier:delayed (backoff), frontier:dead after MAX_ATTEMPTS
     end
 
-    Py->>Redis: BLMOVE queue:raw_pages -> queue:raw_pages:processing + lease
+    Py->>Redis: BLMOVE queue:raw_pages -> processing + lease, GET raw_page:<id>
     Py->>Py: Parse once: Markdown, links, 64-bit SHA-256 fingerprint
-    Py->>Redis: Lua: SADD content:seen, LPUSH queue:parsed_docs, stats, child links
-    Py->>Redis: Acknowledge
-    Note over Go,Py: Reapers re-queue work whose lease expired (crashed worker)
+    Py->>Redis: Commit (one script): ack, dedup, doc, stats, child links, job accounting
+    Note over Go,Py: Reapers re-queue work whose lease expired; stale commits are refused
 ```
 
 ---
@@ -134,13 +129,15 @@ sequenceDiagram
    - **URL Layer**: Uses **RedisBloom (`BF.ADD`)** on `frontier:bloom:url` (reserved for 1M URLs at 0.1% error) for memory-efficient membership testing, with fallback to an exact Redis Set (`frontier:seen`). Checking and enqueueing a URL is one atomic Lua script, so a URL is never marked seen without being queued.
    - **Canonical URLs**: every service normalizes URLs by the same rules (scheme/host case, default ports, fragments, dot segments), verified by shared test vectors in `shared/contracts/url_canonicalization.json`.
    - **Content Layer**: Normalizes DOM bodies (stripping boilerplate scripts, headers, footers) and computes a **64-bit SHA-256 fingerprint** stored in `content:seen` to eliminate duplicate or mirror pages under different URLs.
-2. **At-Least-Once, Crash-Safe Queues**:
-   - Both the URL frontier and the raw page queue use `BLMOVE` into a processing list plus a lease with a deadline. A reaper re-queues work whose worker died, and dead-letters payloads that keep crashing workers (`frontier:dead`, `queue:raw_pages:dead`).
-   - Transient fetch failures (network errors, 429, 5xx) are retried with exponential backoff (honouring `Retry-After`) before being dead-lettered.
-   - The parser records each page's document, fingerprint, stats and child links in one Lua script, so redelivery after a crash is harmless.
-3. **Politeness: robots.txt & Per-Host Rate-Limiting**:
-   - robots.txt is fetched once per host, cached in Redis for 24h and shared by all crawler instances; disallowed URLs are never fetched, and `Crawl-delay` is honoured.
-   - Distributed per-host leases (`SET politeness:host:<domain> <worker_id> NX PX <delay_ms>`) cap each host at one request per window. Targets for a busy host are parked in a delayed queue until the host is free, instead of being spun on.
+2. **Crash-Safe Queues with Exactly-Once Effects**:
+   - Both work queues use `BLMOVE`/claim into a processing list plus a lease with a deadline. A reaper re-queues work whose worker died, and dead-letters payloads that keep crashing workers.
+   - Every outcome is committed by one Lua script **fenced on the lease**. If a slow worker's item was already redelivered, its commit is refused, so nothing is ever recorded twice.
+   - Transient fetch failures (network errors, 429, 5xx) are retried with exponential backoff (honouring `Retry-After`) before being dead-lettered. Dead letters can be inspected and replayed through the API.
+   - Fetched pages use the **claim-check** pattern: the HTML lives in `raw_page:<id>` and the queue carries only ids.
+   - **Jobs complete**: each job tracks its outstanding targets exactly and moves `enqueued → running → completed`.
+3. **Per-Host Back Queues (Politeness by Construction)**:
+   - Following *System Design Interview* ch. 9: targets are routed into one priority-ordered queue per host, and a schedule of when each host may next be contacted decides what is claimed. There is **at most one request in flight per host**, and a gap of `max(POLITENESS_DELAY_MS, Crawl-delay, Retry-After)` after each one. Workers never spin on a busy host.
+   - robots.txt is fetched once per host, cached in Redis for 24h and shared by all crawler instances; disallowed URLs are never fetched.
 4. **Safe by Default**:
    - The fetcher refuses to connect to loopback, private, link-local and cloud-metadata addresses (SSRF guard, checked after DNS resolution and on every redirect). Set `ALLOW_PRIVATE_NETWORKS=true` only for local testing.
    - `stay_in_domain` crawls are bounded by the seed's host (`scope_host`), including after redirects.
@@ -150,7 +147,12 @@ sequenceDiagram
    - **CPU-bound Scraping**: Python service parses each DOM tree once, cleans boilerplate, and extracts metadata in an isolated process.
    - **API Gateway**: Fastify (TypeScript) performs schema validation, batch ingestion, and exposes real-time telemetry and per-job progress counters (`GET /api/jobs/:id`).
 6. **Living Contract Verification**:
-   - Strongly typed JSON Schemas in `shared/contracts/` strictly mapped to Go structs, Python Pydantic models, and TypeScript interfaces. The full Redis layout is documented in [`shared/contracts/REDIS_SPEC.md`](shared/contracts/REDIS_SPEC.md).
+   - JSON Schemas in `shared/contracts/` map to Go structs, Python Pydantic models, and TypeScript interfaces. Each service's tests **validate the payloads it actually produces** against them.
+   - Lua scripts shared between services live once in `shared/redis/`; each service's tests fail if its embedded copy drifts. The full Redis layout is documented in [`shared/contracts/REDIS_SPEC.md`](shared/contracts/REDIS_SPEC.md).
+7. **Operable**:
+   - Prometheus metrics at `GET /metrics`, dead-letter inspection and replay (`GET /api/dead-letters`, `POST /api/dead-letters/replay`), and per-job progress at `GET /api/jobs/:id`.
+   - Redis runs with AOF persistence. With `OUTPUT_DIR` set, every document is also written as Markdown (one folder per job), and the Redis document list is capped by `MAX_PARSED_DOCS`.
+   - CI runs every suite against Redis with and without RedisBloom, with integration tests required (not skipped), and builds all images.
 
 ---
 

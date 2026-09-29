@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Integration tests fail (instead of skipping) when Redis is missing.
+  REQUIRE_REDIS: "1"
+
+jobs:
+  crawler-engine:
+    name: Go crawler (${{ matrix.redis.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        redis:
+          - { name: redis-bloom, image: "redis/redis-stack-server:7.2.0-v13" }
+          - { name: plain-redis, image: "redis:7.2-alpine" }
+    services:
+      redis:
+        image: ${{ matrix.redis.image }}
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 2s --health-timeout 3s --health-retries 15
+    defaults:
+      run:
+        working-directory: services/crawler-engine
+    env:
+      GOWORK: "off"
+      REDIS_TEST_ADDR: localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/crawler-engine/go.mod
+          cache-dependency-path: services/crawler-engine/go.sum
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+
+  parser-scraper:
+    name: Python parser (${{ matrix.redis.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        redis:
+          - { name: redis-bloom, image: "redis/redis-stack-server:7.2.0-v13" }
+          - { name: plain-redis, image: "redis:7.2-alpine" }
+    services:
+      redis:
+        image: ${{ matrix.redis.image }}
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 2s --health-timeout 3s --health-retries 15
+    defaults:
+      run:
+        working-directory: services/parser-scraper
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/parser-scraper/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+
+  api-gateway:
+    name: TypeScript gateway (${{ matrix.redis.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        redis:
+          - { name: redis-bloom, image: "redis/redis-stack-server:7.2.0-v13" }
+          - { name: plain-redis, image: "redis:7.2-alpine" }
+    services:
+      redis:
+        image: ${{ matrix.redis.image }}
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 2s --health-timeout 3s --health-retries 15
+    defaults:
+      run:
+        working-directory: services/api-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: services/api-gateway/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit -p .
+      - run: npm test
+
+  docker-images:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
