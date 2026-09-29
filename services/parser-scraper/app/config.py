@@ -20,3 +20,10 @@ class Config:
     VISIBILITY_TIMEOUT_SEC: int = int(os.getenv("VISIBILITY_TIMEOUT_SEC", "120"))
     MAX_REDELIVERIES: int = int(os.getenv("MAX_REDELIVERIES", "3"))
     REAP_INTERVAL_SEC: int = int(os.getenv("REAP_INTERVAL_SEC", "5"))
+
+    # queue:parsed_docs keeps only the newest documents (0 = unbounded).
+    # Use OUTPUT_DIR for a durable copy of every document.
+    MAX_PARSED_DOCS: int = int(os.getenv("MAX_PARSED_DOCS", "10000"))
+    # When set, every parsed document is also written as Markdown to
+    # OUTPUT_DIR/<job_id>/<url hash>.md.
+    OUTPUT_DIR: str = os.getenv("OUTPUT_DIR", "")

@@ -25,7 +25,7 @@ class Worker:
             port=Config.REDIS_PORT,
             decode_responses=True
         )
-        self.pipeline = ParserPipeline(self.rdb)
+        self.pipeline = ParserPipeline(self.rdb, output_dir=Config.OUTPUT_DIR or None)
         self.queue = ReliableQueue(
             self.rdb,
             Config.QUEUE_RAW_PAGES,
@@ -51,27 +51,31 @@ class Worker:
         if requeued or dead:
             logger.warning(f"♻️  Recovered {requeued} stalled raw pages, dead-lettered {dead}")
 
-    def handle(self, raw_json: str):
+    def handle(self, page_id: str):
+        # Claim-check: the queue carries the id, the page lives in raw_page:<id>.
+        raw_json = self.queue.payload(page_id)
+        if raw_json is None:
+            logger.error(f"Raw page {page_id} expired or missing; dead-lettered")
+            self.queue.dead_letter(page_id, "raw page payload missing or expired")
+            return
+
         # Validate against Shared Contract
         try:
             raw_page = RawPage.model_validate(json.loads(raw_json))
         except (json.JSONDecodeError, ValidationError) as err:
             logger.error(f"Malformed RawPage payload dead-lettered: {err}")
-            self.queue.dead_letter(raw_json, f"malformed RawPage: {err}")
+            self.queue.dead_letter(page_id, f"malformed RawPage: {err}")
             return
 
-        # Process page through parsing pipeline
+        # Process page through parsing pipeline; the commit also acknowledges it.
         try:
-            self.pipeline.process_raw_page(raw_page)
+            self.pipeline.process_raw_page(raw_page, page_id=page_id, settle_keys=self.queue.settle_keys)
         except redis.RedisError:
             raise
         except Exception as ex:
             # Deterministic failure (e.g. parser bug on this HTML): retrying won't help.
             logger.exception(f"Failed to process '{raw_page.url}', dead-lettering: {ex}")
-            self.queue.dead_letter(raw_json, f"{type(ex).__name__}: {ex}")
-            return
-
-        self.queue.ack(raw_json)
+            self.queue.dead_letter(page_id, f"{type(ex).__name__}: {ex}")
 
     def run(self):
         logger.info("==================================================================")
@@ -92,11 +96,11 @@ class Worker:
                 self.maybe_reap()
 
                 # Blocking move with timeout allows checking self.running periodically
-                raw_json = self.queue.take(Config.POLL_TIMEOUT_SEC)
-                if raw_json is None:
+                page_id = self.queue.take(Config.POLL_TIMEOUT_SEC)
+                if page_id is None:
                     continue
 
-                self.handle(raw_json)
+                self.handle(page_id)
 
             except redis.RedisError as rerr:
                 # Anything taken but not acknowledged is redelivered by the reaper.
