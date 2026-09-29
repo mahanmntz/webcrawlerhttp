@@ -230,6 +230,11 @@ func (f *RedisFrontier) Route(ctx context.Context) (int, error) {
 // none it returns a nil Claim and how long until a host frees up (capped by
 // the caller). Corrupt targets are dead-lettered and reported as an error.
 func (f *RedisFrontier) Claim(ctx context.Context) (*Claim, time.Duration, error) {
+	// If crawling is paused, wait without claiming new jobs from the frontier.
+	if paused, _ := f.rdb.Exists(ctx, "crawler:paused").Result(); paused > 0 {
+		return nil, 500 * time.Millisecond, nil
+	}
+
 	now := nowMs()
 	res, err := claimScript.Run(ctx, f.rdb,
 		[]string{FrontierHosts, QueueFrontierProcessing, FrontierLeases, FrontierScheduled},

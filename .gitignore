@@ -26,3 +26,4 @@ output.json
 .env.local
 # Parser Markdown output (OUTPUT_DIR)
 output/
+.vscode/

@@ -724,6 +724,17 @@
             </label>
           </div>
 
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <span class="toggle-title">Force Re-crawl (Bypass Cache)</span>
+              <span class="toggle-desc">Ignore bloom deduplication and re-fetch</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-force">
+              <span class="slider"></span>
+            </label>
+          </div>
+
           <button type="submit" id="btn-submit" class="btn btn-primary" style="padding: 0.8rem; font-size: 0.95rem;">
             ⚡ Start Extraction Mission
           </button>
@@ -853,7 +864,8 @@
         url: document.getElementById('input-url').value.trim(),
         max_depth: parseInt(document.getElementById('input-depth').value, 10),
         priority: parseInt(document.getElementById('input-priority').value, 10),
-        stay_in_domain: document.getElementById('toggle-domain').checked
+        stay_in_domain: document.getElementById('toggle-domain').checked,
+        force: document.getElementById('toggle-force').checked
       };
 
       try {
