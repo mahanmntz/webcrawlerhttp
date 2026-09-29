@@ -118,7 +118,7 @@ sequenceDiagram
     Py->>Redis: BLMOVE queue:raw_pages -> processing + lease, GET raw_page:<id>
     Py->>Py: Parse once: Markdown, links, 64-bit SHA-256 fingerprint
     Py->>Redis: Commit (one script): ack, dedup, doc, stats, child links, job accounting
-    Note over Go,Py: Reapers re-queue work whose lease expired; stale commits are refused
+    Note over Go,Py: Reapers re-queue work whose lease expired, and stale commits are refused
 ```
 
 ---
