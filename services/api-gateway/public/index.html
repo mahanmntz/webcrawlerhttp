@@ -911,7 +911,13 @@
     async function flushCluster() {
       if (!confirm('⚠️ Are you sure you want to flush all queues and crawled data?')) return;
       try {
-        const res = await fetch('/api/cluster/reset', { method: 'POST' });
+        let res = await fetch('/api/cluster/reset', { method: 'POST' });
+        if (res.status === 401) {
+          // Gateway runs with ADMIN_TOKEN set.
+          const token = prompt('Admin token required to flush the cluster:');
+          if (!token) return;
+          res = await fetch('/api/cluster/reset', { method: 'POST', headers: { 'x-admin-token': token } });
+        }
         if (res.ok) {
           showToast('🧹 Cluster state and queues flushed cleanly!');
           fetchMetrics();

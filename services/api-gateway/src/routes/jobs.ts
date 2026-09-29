@@ -2,22 +2,48 @@ import { FastifyPluginAsync } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { redis } from '../redis.js';
 import { config } from '../config.js';
-import { isNewUrl } from '../seen.js';
+import { enqueueTargets } from '../frontier.js';
+import { canonicalizeUrl } from '../url.js';
 import { CrawlTarget, CreateJobRequestBody, CreateBatchJobRequestBody, BatchJobResponse } from '../types.js';
+
+// Per client IP; see RATE_LIMIT_PER_MIN.
+const submitRouteConfig = config.rateLimitPerMinute > 0
+  ? { rateLimit: { max: config.rateLimitPerMinute, timeWindow: '1 minute' } }
+  : {};
+
+const jobOptionsSchema = {
+  max_depth: { type: 'integer', minimum: 0, default: 2 },
+  priority: { type: 'integer', minimum: 1, maximum: 10, default: 5 },
+  stay_in_domain: { type: 'boolean', default: true },
+  force: { type: 'boolean', default: false },
+} as const;
+
+function buildTarget(canonicalUrl: string, maxDepth: number, priority: number, stayInDomain: boolean, now: string): CrawlTarget {
+  return {
+    job_id: uuidv4(),
+    url: canonicalUrl,
+    depth: 0,
+    max_depth: maxDepth,
+    priority,
+    stay_in_domain: stayInDomain,
+    scope_host: new URL(canonicalUrl).hostname,
+    created_at: now,
+  };
+}
 
 export const jobRoutes: FastifyPluginAsync = async (fastify) => {
   // Submit single seed URL
   fastify.post<{ Body: CreateJobRequestBody }>(
     '/api/jobs',
     {
+      config: submitRouteConfig,
       schema: {
         body: {
           type: 'object',
           required: ['url'],
           properties: {
-            url: { type: 'string', format: 'uri' },
-            max_depth: { type: 'integer', minimum: 0, default: 2 },
-            priority: { type: 'integer', minimum: 1, maximum: 10, default: 5 },
+            url: { type: 'string', minLength: 1 },
+            ...jobOptionsSchema,
           },
         },
       },
@@ -25,52 +51,24 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { url, max_depth = 2, priority = 5, stay_in_domain = true, force = false } = request.body;
 
-      try {
-        const parsed = new URL(url);
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
-          return reply.status(400).send({ error: 'Only HTTP and HTTPS URLs are supported' });
-        }
-      } catch {
-        return reply.status(400).send({ error: 'Invalid URL format' });
+      const canonical = canonicalizeUrl(url);
+      if (!canonical) {
+        return reply.status(400).send({ error: 'Only valid HTTP and HTTPS URLs are supported' });
       }
 
-      if (!force) {
-        const isNew = await isNewUrl(url);
-        if (!isNew) {
-          return reply.status(409).send({
-            message: 'URL has already been submitted or crawled (Deduplicated)',
-            url,
-            status: 'deduplicated',
-          });
-        }
+      const target = buildTarget(canonical, max_depth, priority, stay_in_domain, new Date().toISOString());
+      const [enqueued] = await enqueueTargets([target], force);
+      if (!enqueued) {
+        return reply.status(409).send({
+          message: 'URL has already been submitted or crawled (Deduplicated)',
+          url: canonical,
+          status: 'deduplicated',
+        });
       }
-
-      const jobId = uuidv4();
-      const target: CrawlTarget = {
-        job_id: jobId,
-        url,
-        depth: 0,
-        max_depth,
-        priority,
-        stay_in_domain,
-        created_at: new Date().toISOString(),
-      };
-
-      const pipeline = redis.pipeline();
-      pipeline.lpush(config.queueFrontier, JSON.stringify(target));
-      pipeline.hset(`job:${jobId}`, {
-        job_id: jobId,
-        url,
-        max_depth,
-        priority,
-        status: 'enqueued',
-        created_at: target.created_at,
-      });
-      await pipeline.exec();
 
       return reply.status(201).send({
-        job_id: jobId,
-        url,
+        job_id: target.job_id,
+        url: canonical,
         max_depth,
         priority,
         status: 'enqueued',
@@ -83,6 +81,7 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Body: CreateBatchJobRequestBody }>(
     '/api/jobs/batch',
     {
+      config: submitRouteConfig,
       schema: {
         body: {
           type: 'object',
@@ -94,8 +93,7 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
               maxItems: 1000,
               items: { type: 'string' },
             },
-            max_depth: { type: 'integer', minimum: 0, default: 2 },
-            priority: { type: 'integer', minimum: 1, maximum: 10, default: 5 },
+            ...jobOptionsSchema,
           },
         },
       },
@@ -103,90 +101,49 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { urls, max_depth = 2, priority = 5, stay_in_domain = true, force = false } = request.body;
 
-      // Filter and validate URLs
-      const validUrls: string[] = [];
+      const invalidUrls: string[] = [];
+      const canonicalUrls = new Set<string>();
+      let duplicatesInBatch = 0;
       for (const rawUrl of urls) {
-        const trimmed = rawUrl.trim();
-        if (!trimmed) continue;
-        try {
-          const parsed = new URL(trimmed);
-          if (['http:', 'https:'].includes(parsed.protocol)) {
-            validUrls.push(trimmed);
-          }
-        } catch {
-          // Skip invalid URL strings
+        if (!rawUrl.trim()) continue;
+        const canonical = canonicalizeUrl(rawUrl);
+        if (!canonical) {
+          invalidUrls.push(rawUrl);
+        } else if (canonicalUrls.has(canonical)) {
+          duplicatesInBatch++;
+        } else {
+          canonicalUrls.add(canonical);
         }
       }
 
-      if (validUrls.length === 0) {
-        return reply.status(400).send({ error: 'No valid HTTP/HTTPS URLs provided in the batch' });
+      if (canonicalUrls.size === 0) {
+        return reply.status(400).send({ error: 'No valid HTTP/HTTPS URLs provided in the batch', invalid_urls: invalidUrls });
       }
-
-      const enqueuedUrls: string[] = [];
-      const deduplicatedUrls: string[] = [];
-      const jobIds: string[] = [];
-      const enqueuePipeline = redis.pipeline();
 
       const now = new Date().toISOString();
+      const targets = [...canonicalUrls].map((u) => buildTarget(u, max_depth, priority, stay_in_domain, now));
+      const enqueuedFlags = await enqueueTargets(targets, force);
 
-      for (const url of validUrls) {
-        try {
-          if (!force) {
-            const isNew = await isNewUrl(url);
-            if (!isNew) {
-              deduplicatedUrls.push(url);
-              continue;
-            }
-          }
-
-          const jobId = uuidv4();
-          const target: CrawlTarget = {
-            job_id: jobId,
-            url,
-            depth: 0,
-            max_depth,
-            priority,
-            stay_in_domain,
-            created_at: now,
-          };
-
-          enqueuePipeline.lpush(config.queueFrontier, JSON.stringify(target));
-          enqueuePipeline.hset(`job:${jobId}`, {
-            job_id: jobId,
-            url,
-            max_depth,
-            priority,
-            status: 'enqueued',
-            created_at: now,
-          });
-
-          enqueuedUrls.push(url);
-          jobIds.push(jobId);
-        } catch (err) {
-          console.error(`[jobs.batch] Failed to process URL ${url}:`, err);
-          deduplicatedUrls.push(url);
-        }
-      }
-
-      if (enqueuedUrls.length > 0) {
-        await enqueuePipeline.exec();
-      }
+      const enqueued = targets.filter((_, i) => enqueuedFlags[i]);
+      const deduplicatedUrls = targets.filter((_, i) => !enqueuedFlags[i]).map((t) => t.url);
 
       const response: BatchJobResponse = {
         total_received: urls.length,
-        enqueued_count: enqueuedUrls.length,
-        deduplicated_count: deduplicatedUrls.length,
-        enqueued_urls: enqueuedUrls,
+        enqueued_count: enqueued.length,
+        deduplicated_count: deduplicatedUrls.length + duplicatesInBatch,
+        invalid_count: invalidUrls.length,
+        enqueued_urls: enqueued.map((t) => t.url),
         deduplicated_urls: deduplicatedUrls,
-        job_ids: jobIds,
-        message: `Batch processed: ${enqueuedUrls.length} enqueued, ${deduplicatedUrls.length} deduplicated`,
+        invalid_urls: invalidUrls,
+        job_ids: enqueued.map((t) => t.job_id),
+        message: `Batch processed: ${enqueued.length} enqueued, ${deduplicatedUrls.length + duplicatesInBatch} deduplicated, ${invalidUrls.length} invalid`,
       };
 
       return reply.status(201).send(response);
     }
   );
 
-  // Get Job Status
+  // Get Job Status (includes live counters written by the crawler and parser)
   fastify.get<{ Params: { id: string } }>('/api/jobs/:id', async (request, reply) => {
     const { id } = request.params;
     const jobData = await redis.hgetall(`job:${id}`);

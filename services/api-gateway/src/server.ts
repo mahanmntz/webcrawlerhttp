@@ -3,10 +3,12 @@ import { fileURLToPath } from 'url';
 import Fastify from 'fastify';
 import fastifyCors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
+import fastifyRateLimit from '@fastify/rate-limit';
 import { config } from './config.js';
 import { redis } from './redis.js';
 import { jobRoutes } from './routes/jobs.js';
 import { metricsRoutes } from './routes/metrics.js';
+import { deadLetterRoutes } from './routes/deadLetters.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,8 +20,11 @@ export function buildServer() {
 
   // Enable CORS
   app.register(fastifyCors, {
-    origin: true,
+    origin: config.corsOrigins,
   });
+
+  // Opt-in per route (job submission); polling endpoints are not limited.
+  app.register(fastifyRateLimit, { global: false });
 
   // Serve modern Web UI Dashboard
   app.register(fastifyStatic, {
@@ -44,6 +49,7 @@ export function buildServer() {
   // Register Routes
   app.register(jobRoutes);
   app.register(metricsRoutes);
+  app.register(deadLetterRoutes);
 
   return app;
 }
