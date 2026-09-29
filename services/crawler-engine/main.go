@@ -11,7 +11,6 @@ import (
 	"crawler-engine/internal/config"
 	"crawler-engine/internal/fetcher"
 	"crawler-engine/internal/frontier"
-	"crawler-engine/internal/politeness"
 	"crawler-engine/internal/robots"
 	"crawler-engine/internal/worker"
 
@@ -48,7 +47,6 @@ func main() {
 	// Construct Components
 	frontierClient := frontier.New(rdb, cfg.VisibilityTimeout, cfg.MaxRedeliveries)
 	fetcherClient := fetcher.New(cfg)
-	politenessLimiter := politeness.New(rdb, cfg.PolitenessDelayMs)
 
 	var robotsChecker *robots.Checker
 	if cfg.RespectRobots {
@@ -61,10 +59,11 @@ func main() {
 	}
 
 	workerPool := worker.New(worker.Options{
-		WorkerCount:   cfg.WorkerCount,
-		MaxAttempts:   cfg.MaxAttempts,
-		MaxCrawlDelay: cfg.MaxCrawlDelay,
-	}, frontierClient, fetcherClient, politenessLimiter, robotsChecker)
+		WorkerCount:     cfg.WorkerCount,
+		MaxAttempts:     cfg.MaxAttempts,
+		PolitenessDelay: time.Duration(cfg.PolitenessDelayMs) * time.Millisecond,
+		MaxCrawlDelay:   cfg.MaxCrawlDelay,
+	}, frontierClient, fetcherClient, robotsChecker)
 
 	// Setup Graceful Shutdown via OS Signals
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

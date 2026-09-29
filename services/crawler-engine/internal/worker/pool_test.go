@@ -15,12 +15,32 @@ import (
 	"crawler-engine/internal/fetcher"
 	"crawler-engine/internal/frontier"
 	"crawler-engine/internal/models"
-	"crawler-engine/internal/politeness"
 	"crawler-engine/internal/robots"
 	"crawler-engine/internal/testredis"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
+
+const testJobID = "5a332009-79a9-4e76-a172-e78eb119661a"
+
+// validate checks a payload the crawler produced against a shared contract.
+func validate(t *testing.T, contract, payload string) {
+	t.Helper()
+	c := jsonschema.NewCompiler()
+	c.AssertFormat()
+	schema, err := c.Compile("../../../../shared/contracts/" + contract)
+	if err != nil {
+		t.Fatalf("compile %s: %v", contract, err)
+	}
+	inst, err := jsonschema.UnmarshalJSON(strings.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(inst); err != nil {
+		t.Fatalf("payload violates %s: %v\n%s", contract, err, payload)
+	}
+}
 
 type harness struct {
 	t        *testing.T
@@ -50,8 +70,8 @@ func newHarness(t *testing.T, robotsBody string, handler http.HandlerFunc) *harn
 	f := fetcher.New(cfg)
 	h.frontier = frontier.New(h.rdb, time.Minute, 3)
 	h.pool = New(
-		Options{WorkerCount: 1, MaxAttempts: 3, MaxCrawlDelay: 30 * time.Second},
-		h.frontier, f, politeness.New(h.rdb, 1000),
+		Options{WorkerCount: 1, MaxAttempts: 3, PolitenessDelay: time.Second, MaxCrawlDelay: 30 * time.Second},
+		h.frontier, f,
 		robots.New(h.rdb, f.Client(), f.UserAgent(), "SpiderRAG"),
 	)
 	return h
@@ -62,23 +82,49 @@ func (h *harness) host() string {
 	return u.Hostname()
 }
 
-// run enqueues a target, dequeues it like a worker would, and handles it.
+// run enqueues a target, claims it like a worker would, and handles it.
 func (h *harness) run(target models.CrawlTarget) {
 	h.t.Helper()
 	ctx := context.Background()
 	payload, _ := json.Marshal(target)
-	if err := h.rdb.LPush(ctx, frontier.QueueFrontierPending, payload).Err(); err != nil {
+	h.rdb.HIncrBy(ctx, "job:"+target.JobID, "outstanding", 1)
+	if err := h.rdb.LPush(ctx, frontier.QueueFrontierIngest, payload).Err(); err != nil {
 		h.t.Fatal(err)
 	}
-	got, raw, err := h.frontier.DequeueReliable(ctx, time.Second)
-	if err != nil || got == nil {
-		h.t.Fatalf("dequeue: %v", err)
+	if _, err := h.frontier.Route(ctx); err != nil {
+		h.t.Fatal(err)
 	}
-	h.pool.Handle(ctx, "test-worker", got, raw)
+	// Tests run targets for the same host back to back; skip the politeness wait.
+	h.rdb.Del(ctx, frontier.FrontierHosts)
+	h.rdb.ZAdd(ctx, frontier.FrontierHosts, redis.Z{Score: 0, Member: hostKey(target.URL)})
+
+	claim, _, err := h.frontier.Claim(ctx)
+	if err != nil || claim == nil {
+		h.t.Fatalf("claim: %v", err)
+	}
+	h.pool.Handle(ctx, "test-worker", claim)
 
 	if n, _ := h.rdb.LLen(ctx, frontier.QueueFrontierProcessing).Result(); n != 0 {
 		h.t.Fatalf("target was not settled: %d left in processing", n)
 	}
+}
+
+// hostKey mirrors the router: the text between "://" and the first / ? or #.
+func hostKey(raw string) string {
+	_, rest, _ := strings.Cut(raw, "://")
+	if i := strings.IndexAny(rest, "/?#"); i >= 0 {
+		rest = rest[:i]
+	}
+	return strings.ToLower(rest)
+}
+
+// hostReadyIn is how long until the harness host may be contacted again.
+func (h *harness) hostReadyIn() time.Duration {
+	score, err := h.rdb.ZScore(context.Background(), frontier.FrontierHosts, strings.ToLower(strings.TrimPrefix(h.server.URL, "http://"))).Result()
+	if err != nil {
+		return 0
+	}
+	return time.Until(time.UnixMilli(int64(score)))
 }
 
 func (h *harness) count(key string) int64 {
@@ -87,7 +133,7 @@ func (h *harness) count(key string) int64 {
 }
 
 func (h *harness) jobCounter(field string) string {
-	v, _ := h.rdb.HGet(context.Background(), "job:job-1", field).Result()
+	v, _ := h.rdb.HGet(context.Background(), "job:"+testJobID, field).Result()
 	return v
 }
 
@@ -104,7 +150,7 @@ func (h *harness) delayed() []models.CrawlTarget {
 
 func (h *harness) target(path string) models.CrawlTarget {
 	return models.CrawlTarget{
-		JobID: "job-1", URL: h.server.URL + path, MaxDepth: 1, Priority: 5,
+		JobID: testJobID, URL: h.server.URL + path, MaxDepth: 1, Priority: 5,
 		StayInDomain: true, ScopeHost: h.host(), CreatedAt: time.Now(),
 	}
 }
@@ -121,7 +167,9 @@ func TestHandle_SuccessPushesRawPage(t *testing.T) {
 	if h.count(frontier.QueueRawPages) != 1 {
 		t.Fatal("expected RawPage to be pushed to the parser queue")
 	}
-	raw, _ := h.rdb.LIndex(context.Background(), frontier.QueueRawPages, 0).Result()
+	id, _ := h.rdb.LIndex(context.Background(), frontier.QueueRawPages, 0).Result()
+	raw, _ := h.rdb.Get(context.Background(), frontier.RawPagePrefix+id).Result()
+	validate(t, "raw_page.json", raw)
 	var page models.RawPage
 	_ = json.Unmarshal([]byte(raw), &page)
 	if page.ScopeHost != h.host() {
@@ -129,6 +177,9 @@ func TestHandle_SuccessPushesRawPage(t *testing.T) {
 	}
 	if h.jobCounter(counterFetched) != "1" {
 		t.Fatal("expected pages_fetched counter")
+	}
+	if wait := h.hostReadyIn(); wait < 800*time.Millisecond {
+		t.Fatalf("host must stay closed for the politeness delay after a fetch, got %v", wait)
 	}
 }
 
@@ -140,6 +191,8 @@ func TestHandle_ServerErrorIsRetriedWithBackoff(t *testing.T) {
 	if len(delayed) != 1 || delayed[0].Attempts != 1 {
 		t.Fatalf("expected one delayed retry with attempts=1, got %+v", delayed)
 	}
+	items, _ := h.rdb.ZRange(context.Background(), frontier.FrontierDelayed, 0, -1).Result()
+	validate(t, "crawl_target.json", items[0])
 	if h.count(frontier.QueueRawPages) != 0 || h.count(frontier.FrontierDead) != 0 {
 		t.Fatal("a retryable failure must not be pushed or dead-lettered")
 	}
@@ -196,26 +249,34 @@ func TestHandle_RobotsDisallowSkipsWithoutFetching(t *testing.T) {
 	}
 }
 
-func TestHandle_BusyHostIsParkedNotFetched(t *testing.T) {
-	h := newHarness(t, "", htmlPage)
-	h.run(h.target("/first"))
-	h.run(h.target("/second"))
+func TestHandle_CrawlDelayExtendsHostWindow(t *testing.T) {
+	h := newHarness(t, "User-agent: *\nCrawl-delay: 10\n", htmlPage)
+	h.run(h.target("/page"))
 
-	if h.hits.Load() != 1 {
-		t.Fatalf("second target must wait for the politeness window, got %d fetches", h.hits.Load())
+	if wait := h.hostReadyIn(); wait < 9*time.Second {
+		t.Fatalf("expected robots.txt Crawl-delay (10s) to hold the host, got %v", wait)
 	}
-	if delayed := h.delayed(); len(delayed) != 1 || delayed[0].Attempts != 0 {
-		t.Fatalf("expected the second target parked without using an attempt, got %+v", delayed)
+}
+
+func TestHandle_RetryAfterHoldsTheHost(t *testing.T) {
+	h := newHarness(t, "", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "30")
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+	h.run(h.target("/limited"))
+
+	if wait := h.hostReadyIn(); wait < 29*time.Second {
+		t.Fatalf("a 429 with Retry-After must close the whole host, got %v", wait)
 	}
 }
 
 func TestHandle_InvalidURLIsDeadLetteredNotLooped(t *testing.T) {
 	h := newHarness(t, "", htmlPage)
 	target := h.target("")
-	target.URL = "not-a-url"
+	target.URL = "http://%zz/"
 	h.run(target)
 
-	if h.count(frontier.FrontierDead) != 1 || h.count(frontier.QueueFrontierPending) != 0 || len(h.delayed()) != 0 {
+	if h.count(frontier.FrontierDead) != 1 || h.count(frontier.QueueFrontierIngest) != 0 || len(h.delayed()) != 0 {
 		t.Fatal("invalid URL must be dead-lettered once, not requeued")
 	}
 }
